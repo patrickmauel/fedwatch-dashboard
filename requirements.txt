@@ -1,0 +1,8 @@
+pandas<3
+numpy
+scipy
+statsmodels
+openpyxl
+pandas_datareader
+plotly
+streamlit

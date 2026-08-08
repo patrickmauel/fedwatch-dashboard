@@ -30,10 +30,17 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run pipeline
-        run: python pipeline.py
+      - name: Run all pipelines
+        run: |
+          status=0
+          for f in pipelines/*.py; do
+            echo "=== Running $f ==="
+            python "$f" || { echo "FAILED: $f"; status=1; }
+          done
+          exit $status
 
       - name: Commit and push updated data
+        if: always()  # still commit data from pipelines that succeeded even if another one failed above
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

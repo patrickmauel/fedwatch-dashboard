@@ -1,18 +1,18 @@
 """
-FedWatch data pipeline.
+Rates & Macro data pipeline (one section of the larger dashboard).
 
 Pulls live data (FRED, NY Fed, Cleveland Fed, U.S. Treasury), runs the
 Laubach-Williams-based rate/growth/inflation model and Monte Carlo
 simulation, builds every dashboard chart, and writes:
 
-  data/figures/*.json  -- one Plotly figure per chart (plotly.io JSON)
-  data/fomc_grid.csv   -- the FOMC data-release grid as a plain table
-  data/meta.json       -- last-updated timestamp + headline stats
+  data/rates_macro/figures/*.json  -- one Plotly figure per chart (plotly.io JSON)
+  data/rates_macro/fomc_grid.csv   -- the FOMC data-release grid as a plain table
+  data/rates_macro/meta.json       -- last-updated timestamp + headline stats
 
-Run standalone: `python pipeline.py`. Intended to be run once a day by the
-GitHub Actions workflow in .github/workflows/daily_refresh.yml; the
-Streamlit app only ever reads the files this script writes, never the
-network.
+Run standalone: `python pipelines/rates_macro.py` (from the repo root).
+Intended to be run once a day by the GitHub Actions workflow in
+.github/workflows/daily_refresh.yml; pages/rates_macro.py only ever reads
+the files this script writes, never the network.
 """
 import datetime as dt
 import json
@@ -27,7 +27,7 @@ import statsmodels.formula.api as smf
 from plotly.subplots import make_subplots
 from scipy.interpolate import PchipInterpolator
 
-DATA_DIR = Path(__file__).parent / "data"
+DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "rates_macro"
 FIGURES_DIR = DATA_DIR / "figures"
 FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -751,8 +751,11 @@ def main():
     add_recession_bands(fig, recession_bands, xmin=labor_ystart)
     FIGURES["labor_payrolls"] = style_fig(fig, "Nonfarm Payrolls, Monthly Change", yaxis_title="Thousands of jobs")
 
+    # ICSA is weekly -- unlike the other labor series above, do NOT shift its
+    # index to MonthEnd: that collapses ~4 weekly observations per month onto
+    # the same duplicate date, which renders as a zigzag. Keep its native
+    # (already meaningful) week-ending date.
     claims = web.DataReader("ICSA", "fred", start_date, end_date).squeeze() / 1000.0
-    claims.index = claims.index + pd.offsets.MonthEnd()
     fig = go.Figure()
     d = claims.loc[labor_ystart:]
     fig.add_trace(go.Scatter(x=d.index, y=d.values, line=dict(color=CAT[0], width=2)))

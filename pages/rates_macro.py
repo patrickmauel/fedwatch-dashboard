@@ -124,6 +124,12 @@ with tab_credit:
 
 with tab_labor:
     st.subheader("Labor market")
+    st.caption(
+        "Data runs back to 2007, but charts open on 2022+ by default -- April 2020's ~20M "
+        "one-month payroll drop and claims' ~6.9M one-week spike are so far outside every other "
+        "value that including them by default flattens the rest of each chart. Click the "
+        "autoscale icon in a chart's toolbar (or drag to zoom out) to see the full history."
+    )
     col1, col2 = st.columns(2)
     chart("labor_unemployment", col1)
     chart("labor_participation", col2)

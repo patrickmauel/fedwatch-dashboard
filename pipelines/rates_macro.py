@@ -227,7 +227,17 @@ GRIDLINE, BASELINE, SURFACE = "#e1e0d9", "#c3c2b7", "#fcfcfb"
 RECESSION_FILL = "rgba(137,135,129,0.16)"
 
 
-def style_fig(fig, title, yaxis_title=None, height=380, legend=True):
+def style_fig(fig, title, yaxis_title=None, height=380, legend=True, default_view=None, default_yrange=None):
+    """default_view: optional [start, end] to set the INITIAL x-axis viewport
+    without truncating the underlying trace data -- lets a chart default to a
+    legible recent window while dragging to zoom out (or the chart toolbar's
+    autoscale icon) still reveals the full history.
+
+    Plotly's y-axis autorange considers the FULL trace regardless of the
+    x-range, so constraining x alone still leaves y stretched to fit
+    outliers outside the visible window (e.g. a 2020 spike) -- pass
+    default_yrange=[lo, hi] (computed from just the data inside the
+    default_view window) to fix that; autoscale still resets both axes."""
     fig.update_layout(
         title=dict(text=title, font=dict(size=15, color=INK_PRIMARY)),
         plot_bgcolor=SURFACE, paper_bgcolor=SURFACE,
@@ -240,7 +250,23 @@ def style_fig(fig, title, yaxis_title=None, height=380, legend=True):
     )
     fig.update_xaxes(showgrid=False, showline=True, linecolor=BASELINE, ticks="outside", tickcolor=BASELINE, tickfont=dict(color=INK_MUTED))
     fig.update_yaxes(showgrid=True, gridcolor=GRIDLINE, gridwidth=1, zeroline=False, showline=False, tickfont=dict(color=INK_MUTED), title=dict(text=yaxis_title, font=dict(size=11, color=INK_MUTED)))
+    if default_view is not None:
+        fig.update_xaxes(range=default_view, autorange=False)
+    if default_yrange is not None:
+        fig.update_yaxes(range=default_yrange, autorange=False)
     return fig
+
+
+def _padded_range(*series_list, pad_frac=0.08, floor_at_zero=False):
+    """Min/max across one or more pd.Series (already sliced to the intended
+    view window), padded by pad_frac of the span, for use as default_yrange."""
+    lo = min(s.min() for s in series_list)
+    hi = max(s.max() for s in series_list)
+    pad = (hi - lo) * pad_frac or 1.0
+    lo, hi = lo - pad, hi + pad
+    if floor_at_zero:
+        lo = max(lo, 0.0)
+    return [lo, hi]
 
 
 def get_recession_bands(start_date, end_date):
@@ -718,7 +744,17 @@ def main():
     # =========================================================================
     # 12. Labor market context
     # =========================================================================
-    labor_ystart = "2022"
+    # Underlying data goes back to 2007 (covers the 2008 GFC), but three of
+    # these series have one-month/one-week moves during COVID that are an
+    # order of magnitude larger than anything else in the series (payrolls
+    # fell ~20M in April 2020 alone; claims spiked to ~6.9M in a single week
+    # in March 2020) -- on a linear scale, including those by default flattens
+    # everything else in the chart to a thin line. So: full history is always
+    # in the trace data (drag-to-zoom-out or the chart toolbar's autoscale
+    # icon reveals it), but the default viewport opens on the recent regime.
+    labor_ystart = "2007"
+    labor_view_start = "2022"
+    labor_view = [labor_view_start, end_date]
 
     unemployment = web.DataReader("UNRATE", "fred", start_date, end_date).squeeze()
     unemployment.index = unemployment.index + pd.offsets.MonthEnd()
@@ -726,7 +762,10 @@ def main():
     d = unemployment.loc[labor_ystart:]
     fig.add_trace(go.Scatter(x=d.index, y=d.values, line=dict(color=CAT[0], width=2)))
     add_recession_bands(fig, recession_bands, xmin=labor_ystart)
-    FIGURES["labor_unemployment"] = style_fig(fig, "Unemployment Rate", yaxis_title="%", legend=False, height=320)
+    FIGURES["labor_unemployment"] = style_fig(
+        fig, "Unemployment Rate", yaxis_title="%", legend=False, height=320,
+        default_view=labor_view, default_yrange=_padded_range(unemployment.loc[labor_view_start:]),
+    )
 
     laborpart = web.DataReader("CIVPART", "fred", start_date, end_date).squeeze()
     laborpart.index = laborpart.index + pd.offsets.MonthEnd()
@@ -737,7 +776,11 @@ def main():
         d = s.loc[labor_ystart:]
         fig.add_trace(go.Scatter(x=d.index, y=d.values, name=name, line=dict(color=color, width=2)))
     add_recession_bands(fig, recession_bands, xmin=labor_ystart)
-    FIGURES["labor_participation"] = style_fig(fig, "Labor Force Participation & Employment-Population Ratio", yaxis_title="%")
+    FIGURES["labor_participation"] = style_fig(
+        fig, "Labor Force Participation & Employment-Population Ratio", yaxis_title="%",
+        default_view=labor_view,
+        default_yrange=_padded_range(laborpart.loc[labor_view_start:], emp_pop.loc[labor_view_start:]),
+    )
 
     nonfarm = web.DataReader("PAYEMS", "fred", start_date, end_date).squeeze().diff()
     nonfarm.index = nonfarm.index + pd.offsets.MonthEnd()
@@ -749,7 +792,10 @@ def main():
     fig.add_trace(go.Scatter(x=[x0], y=[None], mode="markers", marker=dict(color=STATUS_GOOD, size=10), name="Gain"))
     fig.add_trace(go.Scatter(x=[x0], y=[None], mode="markers", marker=dict(color=STATUS_CRITICAL, size=10), name="Loss"))
     add_recession_bands(fig, recession_bands, xmin=labor_ystart)
-    FIGURES["labor_payrolls"] = style_fig(fig, "Nonfarm Payrolls, Monthly Change", yaxis_title="Thousands of jobs")
+    FIGURES["labor_payrolls"] = style_fig(
+        fig, "Nonfarm Payrolls, Monthly Change", yaxis_title="Thousands of jobs",
+        default_view=labor_view, default_yrange=_padded_range(nonfarm.loc[labor_view_start:]),
+    )
 
     # ICSA is weekly -- unlike the other labor series above, do NOT shift its
     # index to MonthEnd: that collapses ~4 weekly observations per month onto
@@ -760,20 +806,33 @@ def main():
     d = claims.loc[labor_ystart:]
     fig.add_trace(go.Scatter(x=d.index, y=d.values, line=dict(color=CAT[0], width=2)))
     add_recession_bands(fig, recession_bands, xmin=labor_ystart)
-    FIGURES["labor_claims"] = style_fig(fig, "Initial Jobless Claims (weekly)", yaxis_title="Thousands", legend=False, height=320)
+    FIGURES["labor_claims"] = style_fig(
+        fig, "Initial Jobless Claims (weekly)", yaxis_title="Thousands", legend=False, height=320,
+        default_view=labor_view, default_yrange=_padded_range(claims.loc[labor_view_start:], floor_at_zero=True),
+    )
 
     jolts = web.DataReader("JTSJOL", "fred", start_date, end_date).squeeze()
     jolts.index = jolts.index + pd.offsets.MonthEnd()
     quitsrate = web.DataReader("JTSQUR", "fred", start_date, end_date).squeeze()
     quitsrate.index = quitsrate.index + pd.offsets.MonthEnd()
     fig = go.Figure()
-    base_date = jolts.loc[labor_ystart:].index[0]
+    # JOLTS only starts Dec 2000; index base stays at labor_view_start (2022,
+    # the "current regime" the story is about) even though the lines now
+    # extend back to labor_ystart -- pre-2022 values just read as index level
+    # relative to that same anchor, which stays interpretable zoomed out.
+    base_date = jolts.loc[labor_view_start:].index[0]
+    indexed_series = []
     for name, s, color in [("Job openings (JOLTS)", jolts, CAT[0]), ("Quits rate", quitsrate, CAT[1])]:
         d = s.loc[labor_ystart:]
         idx = d / d.loc[base_date] * 100.0
         fig.add_trace(go.Scatter(x=idx.index, y=idx.values, name=name, line=dict(color=color, width=2)))
+        indexed_series.append(idx)
     add_recession_bands(fig, recession_bands, xmin=labor_ystart)
-    FIGURES["labor_demand"] = style_fig(fig, "Labor Demand", yaxis_title=f"Index ({base_date:%b %Y} = 100)")
+    FIGURES["labor_demand"] = style_fig(
+        fig, "Labor Demand", yaxis_title=f"Index ({base_date:%b %Y} = 100)",
+        default_view=labor_view,
+        default_yrange=_padded_range(*[s.loc[labor_view_start:] for s in indexed_series]),
+    )
 
     # =========================================================================
     # 13. FOMC data release grid

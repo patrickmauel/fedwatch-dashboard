@@ -44,10 +44,22 @@ meta = load_meta()
 
 st.title("Currencies")
 
-if meta is None:
+REQUIRED_META_KEYS = {
+    "last_updated", "hlw_anchor_quarter", "fcst_end", "us_policy_rate",
+    "ea_policy_rate", "ca_policy_rate", "eurusd_spot", "cadusd_spot",
+}
+if meta is None or not REQUIRED_META_KEYS.issubset(meta):
+    # meta.json is written in one atomic json.dump() at the very end of a
+    # successful pipeline run, so a real file should never be partial --
+    # missing keys here means something upstream is stale (e.g. a cache or
+    # deploy-in-progress race) rather than a data problem worth rendering
+    # around piecemeal. Clearing the cache resolves it if so.
+    load_meta.clear()
     st.error(
-        "No data found yet. Run `python pipelines/currencies.py` locally (or wait for the "
-        "first scheduled GitHub Actions run) to populate the `data/currencies/` folder."
+        "Data file is missing or incomplete. This usually clears itself -- try refreshing the "
+        "page. If it persists, run `python pipelines/currencies.py` locally (or wait for the "
+        "next scheduled GitHub Actions run) to (re)populate `data/currencies/`, or reboot the "
+        "app from Streamlit Cloud's 'Manage app' menu to clear a stale cache."
     )
     st.stop()
 

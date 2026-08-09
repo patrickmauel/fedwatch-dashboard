@@ -2,7 +2,7 @@
 
 A multi-section Streamlit dashboard, deployed at
 [fedwatch-dashboard](https://github.com/patrickmauel/fedwatch-dashboard) ->
-Streamlit Community Cloud. Currently one live section, built to add more:
+Streamlit Community Cloud. Two live sections so far, built to add more:
 
 - **Rates & Macro** (live) -- GDP growth, inflation, the fed funds rate, and
   the Treasury term structure, built on the NY Fed's Laubach-Williams r*
@@ -10,8 +10,15 @@ Streamlit Community Cloud. Currently one live section, built to add more:
   Monte Carlo simulation. Plus credit-market and labor-market context
   charts and a z-score-flagged grid of FOMC-relevant data releases. Deployable
   counterpart to the `FedWatch_v2.ipynb` notebook in `../new_jupyter/`.
+- **Currencies** (live) -- the Holston-Laubach-Williams multi-country
+  natural-rate model (US / Euro Area / Canada): GDP, inflation, and policy
+  rate per country with the same Monte Carlo approach as Rates & Macro, an
+  EUR/USD and CAD/USD forecast derived from the simulated interest-rate
+  differentials, and a US-vs-Euro-Area trade balance chart. Deployable
+  counterpart to `../examples/HLW_Currency.ipynb`. Two real bugs were found
+  and fixed while porting it -- see the docstring at the top of
+  `pipelines/currencies.py`.
 - **Equities** -- placeholder, not built yet.
-- **Currencies** -- placeholder, not built yet.
 
 ## How a section is structured
 
@@ -53,6 +60,7 @@ up automatically, nothing to add to the workflow.
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python pipelines/rates_macro.py     # populates data/rates_macro/ (~1 min)
+python pipelines/currencies.py      # populates data/currencies/ (~1 min)
 streamlit run streamlit_app.py
 ```
 

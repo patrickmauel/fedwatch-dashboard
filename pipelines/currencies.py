@@ -104,14 +104,27 @@ def add_recession_bands(fig, rec_bands, xmin=None):
     return fig
 
 
+def hex_to_rgba(hex_color, alpha):
+    hex_color = hex_color.lstrip("#")
+    r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+    return f"rgba({r},{g},{b},{alpha})"
+
+
 def add_fan(fig, df_fcst, color, name, y_start=None):
+    # BUG FIX: this used to do color.replace("rgb", "rgba").replace(")", ",0.25)")
+    # to add alpha -- a no-op on the hex strings (e.g. "#2a78d6") every call
+    # site here actually passes, so the "1-sigma" band was rendering fully
+    # OPAQUE, not translucent, which also buried the dashed mean line
+    # underneath a solid-colored block. hex_to_rgba() does a real conversion;
+    # the mean line is now solid (not dashed) and a touch thicker so it reads
+    # clearly through the translucent band instead of blending into it.
     d = df_fcst.loc[y_start:] if y_start else df_fcst
     lo = pd.to_numeric(d.quantile(0.16, axis=1))
     hi = pd.to_numeric(d.quantile(0.84, axis=1))
     mean = pd.to_numeric(d.mean(axis=1))
     fig.add_trace(go.Scatter(x=lo.index, y=lo.values, mode="lines", line=dict(width=0), showlegend=False, hoverinfo="skip"))
-    fig.add_trace(go.Scatter(x=hi.index, y=hi.values, mode="lines", line=dict(width=0), fill="tonexty", fillcolor=color.replace("rgb", "rgba").replace(")", ",0.25)"), name=f"{name} 1-sigma", hoverinfo="skip"))
-    fig.add_trace(go.Scatter(x=mean.index, y=mean.values, mode="lines", line=dict(color=color, dash="dash"), name=f"{name} mean"))
+    fig.add_trace(go.Scatter(x=hi.index, y=hi.values, mode="lines", line=dict(width=0), fill="tonexty", fillcolor=hex_to_rgba(color, 0.25), name=f"{name} 1-sigma", hoverinfo="skip"))
+    fig.add_trace(go.Scatter(x=mean.index, y=mean.values, mode="lines", line=dict(color=color, width=2.5), name=f"{name} mean"))
 
 
 def run_hlw(country, df_combined, df_parameters, end_date, nsims, rng):
@@ -322,7 +335,7 @@ def main():
         fig.add_trace(go.Scatter(x=potential_growth_hist.index, y=potential_growth_hist.values, name="Potential GDP growth", line=dict(color=CAT[0], width=2)))
         add_fan(fig, potential_growth_fcst, CAT[0], "Potential")
         fig.add_trace(go.Scatter(x=actual_growth_hist.index, y=actual_growth_hist.values, name="Actual GDP growth", line=dict(color=CAT[2], width=2)))
-        add_fan(fig, actual_growth_fcst, "rgb(27,175,122)", "Actual")
+        add_fan(fig, actual_growth_fcst, CAT[2], "Actual")  # CAT[2] == rgb(27,175,122), was a hand-typed literal
         add_recession_bands(fig, recession_bands, xmin=view_ystart)
         FIGURES[f"{key_prefix}_gdp"] = style_fig(fig, f"{country}: GDP Growth, Actual vs. Potential", yaxis_title="YoY %")
 

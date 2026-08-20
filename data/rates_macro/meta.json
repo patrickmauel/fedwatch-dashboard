@@ -1,14 +1,14 @@
 {
-  "last_updated": "2026-08-19T11:16:53.901652+00:00",
+  "last_updated": "2026-08-20T11:18:46.760729+00:00",
   "fcst_start_lw": "2026-03-31",
   "last_actual_quarter": "2026-06-30",
   "fcst_end": "2029-06-30",
-  "treasury_asof_date": "2026-08-18",
+  "treasury_asof_date": "2026-08-19",
   "fed_funds_effective": 3.63,
   "unemployment_rate": 4.1,
   "core_pce_yoy": 3.29,
   "core_cpi_yoy": 2.79,
-  "ff_model_median_1yr": 3.05,
+  "ff_model_median_1yr": 3.04,
   "outsized_release_count": 0,
   "num_fomc_grid_rows": 17
 }

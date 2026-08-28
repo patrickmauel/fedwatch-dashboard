@@ -1,10 +1,10 @@
 {
-  "last_updated": "2026-08-27T20:52:56.711764+00:00",
-  "hlw_anchor_quarter": "2026-01-01",
-  "fcst_end": "2029-01-01",
-  "us_policy_rate": 3.76,
-  "ea_policy_rate": 2.1,
+  "last_updated": "2026-08-28T21:18:53.884784+00:00",
+  "hlw_anchor_quarter": "2026-04-01",
+  "fcst_end": "2029-04-01",
+  "us_policy_rate": 3.75,
+  "ea_policy_rate": 2.3,
   "ca_policy_rate": 2.31,
-  "eurusd_spot": 1.1736,
-  "cadusd_spot": 0.7293
+  "eurusd_spot": 1.1614,
+  "cadusd_spot": 0.7207
 }

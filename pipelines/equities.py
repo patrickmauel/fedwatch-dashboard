@@ -45,14 +45,20 @@ Capital-structure comparison uses:
     which is never true. Confirmed the "EY" series against BAMLC0A0CMEY
     (investment-grade effective yield, same naming convention) reading
     sensibly above Baa's own yield before shipping this.
-    KNOWN LIMITATION: FRED's public feed for ICE-sourced series (both
-    effective-yield series above included) is licensed to only expose a
-    trailing ~3-year window to unauthenticated requests -- the full high-
-    yield series historically ran back to 1996, but a `cosd=1996-01-01`
-    request to FRED's own CSV endpoint is silently truncated to ~3 years
-    back regardless. Included anyway for the recent-regime comparison it's
-    still useful for; the line will simply appear only over the last few
-    years rather than the full chart.
+    KNOWN LIMITATION -- confirmed, not a code bug: every ICE-sourced series
+    on FRED (all `BAML*` IDs -- OAS or effective-yield, high-yield or
+    investment-grade) is now capped to a trailing ~3-year window. FRED's own
+    series-page notes for BAMLH0A0HYM2 say so explicitly: "Starting in April
+    2026, this series will only include 3 years of observations... For more
+    data, go to the source" (ICE Data Indices, whose license prohibits
+    redistributing the fuller history FRED used to carry back to 1996).
+    Checked whether picking a different series ID or hitting FRED's CSV
+    endpoint with an explicit `cosd=1996-01-01` sidesteps it -- neither does;
+    the truncation applies at the data-licensing level, not per-request.
+    There's no other free public source with a comparable continuous
+    high-yield credit series, so this is included anyway for the
+    recent-regime comparison it's still useful for -- the line just starts
+    a few years into the chart rather than spanning the full history.
 """
 import datetime as dt
 import io
@@ -92,7 +98,7 @@ SERIES_COLOR = {
 }
 
 
-def style_fig(fig, title, yaxis_title=None, height=460, legend=True):
+def style_fig(fig, title, yaxis_title=None, height=520, legend=True):
     fig.update_layout(
         # BUG FIX: caused a site-wide outage the day this section shipped.
         # go.Figure() defaults layout.template to plotly's full built-in
@@ -113,9 +119,20 @@ def style_fig(fig, title, yaxis_title=None, height=460, legend=True):
         font=dict(color=INK_SECONDARY, size=12),
         hovermode="x unified",
         height=height,
-        margin=dict(l=60, r=30, t=60, b=40),
+        # BUG FIX: this chart's legend has 6 entries with genuinely long
+        # names (e.g. "Baa Corporate (investment-grade)") -- unlike
+        # rates_macro/currencies' 2-4 short entries, these wrap to 2 lines
+        # at typical container widths. The shared t=60/yanchor="bottom"
+        # combo those sections use gives a 2-line legend nowhere to go but
+        # on top of the title. t=110 (up from 60) reserves enough header
+        # room for title + a wrapped 2-line legend, and yanchor="top"
+        # (was "bottom") anchors the legend's TOP at y=1.0 so it hangs
+        # downward from there instead of growing upward into the title.
+        # height bumped 460->520 to match, so the plot area itself doesn't
+        # shrink. Verified by rendering at 800px and 1200px widths.
+        margin=dict(l=60, r=30, t=110, b=40),
         showlegend=legend,
-        legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="left", x=0, font=dict(size=11)),
+        legend=dict(orientation="h", yanchor="top", y=1.0, xanchor="left", x=0, font=dict(size=11)),
     )
     fig.update_xaxes(showgrid=False, showline=True, linecolor=BASELINE, ticks="outside", tickcolor=BASELINE, tickfont=dict(color=INK_MUTED))
     fig.update_yaxes(showgrid=True, gridcolor=GRIDLINE, gridwidth=1, zeroline=False, showline=False, tickfont=dict(color=INK_MUTED), title=dict(text=yaxis_title, font=dict(size=11, color=INK_MUTED)))

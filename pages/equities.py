@@ -93,9 +93,10 @@ st.caption(
 )
 chart("yield_comparison")
 st.caption(
-    "High-yield credit (ICE BofA effective yield) only appears over roughly the last 3 years -- "
-    "FRED's public feed for that series is licensed to expose just a trailing window, not its full "
-    "history back to 1996."
+    "High-yield credit (ICE BofA effective yield) only appears over roughly the last 3 years. "
+    "As of April 2026, ICE's license restricts every ICE-sourced series on FRED -- this one "
+    "included -- to a trailing 3-year window; the full history back to 1996 isn't available from "
+    "any free public source."
 )
 
 st.divider()

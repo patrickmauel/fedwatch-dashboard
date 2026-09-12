@@ -2,7 +2,7 @@
 
 A multi-section Streamlit dashboard, deployed at
 [fedwatch-dashboard](https://github.com/patrickmauel/fedwatch-dashboard) ->
-Streamlit Community Cloud. Two live sections so far, built to add more:
+Streamlit Community Cloud. Three live sections so far, built to add more:
 
 - **Rates & Macro** (live) -- GDP growth, inflation, the fed funds rate, and
   the Treasury term structure, built on the NY Fed's Laubach-Williams r*
@@ -18,7 +18,13 @@ Streamlit Community Cloud. Two live sections so far, built to add more:
   counterpart to `../examples/HLW_Currency.ipynb`. Two real bugs were found
   and fixed while porting it -- see the docstring at the top of
   `pipelines/currencies.py`.
-- **Equities** -- placeholder, not built yet.
+- **Equities** (live) -- three fundamental S&P 500 valuation yields
+  (trailing earnings yield, CAPE yield, dividend yield -- all built from
+  Robert Shiller's public dataset) plotted against the rest of the capital
+  structure: the risk-free 10-year Treasury, Baa investment-grade credit,
+  and ICE BofA high-yield credit (all FRED). A true forward earnings yield
+  is deliberately left out -- no free continuously-updated public series
+  exists for it; see the docstring in `pipelines/equities.py`.
 
 ## How a section is structured
 

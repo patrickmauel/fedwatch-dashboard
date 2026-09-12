@@ -5,4 +5,5 @@ statsmodels
 openpyxl
 pandas_datareader
 plotly
+requests
 streamlit

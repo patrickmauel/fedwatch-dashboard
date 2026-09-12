@@ -65,6 +65,14 @@ COUNTRY_COLOR = {"US": CAT[0], "Euro Area": CAT[1], "Canada": CAT[2]}
 
 def style_fig(fig, title, yaxis_title=None, height=380, legend=True):
     fig.update_layout(
+        # BUG FIX (site-wide outage, see pipelines/equities.py's style_fig for
+        # the full story): template=None stops pio.write_json from baking
+        # plotly's default trace-type template into the JSON -- plotly 7.0
+        # dropped a trace type that was in 6.x's template, so any chart
+        # exported with the template attached fails to load under plotly>=7.
+        # Not needed for styling: every visual property here is already set
+        # explicitly, in update_layout and update_xaxes/update_yaxes below.
+        template=None,
         title=dict(text=title, font=dict(size=15, color=INK_PRIMARY)),
         plot_bgcolor=SURFACE, paper_bgcolor=SURFACE,
         font=dict(color=INK_SECONDARY, size=12),

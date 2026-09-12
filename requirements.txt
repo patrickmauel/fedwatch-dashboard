@@ -4,6 +4,11 @@ scipy
 statsmodels
 openpyxl
 pandas_datareader
-plotly
+# <8: plotly 7.0 broke reading JSON charts written under 6.x (see the
+# template=None bug-fix comments in pipelines/*.py's style_fig()). Charts are
+# now written without an embedded template so this ceiling isn't load-bearing
+# anymore, but pinning means the next major bump gets tested here first
+# instead of breaking the live site again.
+plotly<8
 requests
 streamlit

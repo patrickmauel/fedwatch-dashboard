@@ -239,6 +239,16 @@ def style_fig(fig, title, yaxis_title=None, height=380, legend=True, default_vie
     default_yrange=[lo, hi] (computed from just the data inside the
     default_view window) to fix that; autoscale still resets both axes."""
     fig.update_layout(
+        # BUG FIX (site-wide outage, see pipelines/equities.py's style_fig for
+        # the full story): leaving the default template attached means
+        # pio.write_json bakes plotly's entire built-in trace-type template
+        # into every chart's JSON. plotly 7.0 dropped 'scattermapbox' from
+        # that template (renamed to 'scattermap'), and reading a JSON file
+        # written under 6.x with plotly>=7 installed then raises a
+        # ValueError on every single chart -- template=None means nothing
+        # here relies on the default theme anyway (every visual property is
+        # already set explicitly below and in update_xaxes/update_yaxes).
+        template=None,
         title=dict(text=title, font=dict(size=15, color=INK_PRIMARY)),
         plot_bgcolor=SURFACE, paper_bgcolor=SURFACE,
         font=dict(color=INK_SECONDARY, size=12),
@@ -616,6 +626,10 @@ def main():
 
     legend_style = dict(font=dict(size=10), bgcolor="rgba(255,255,255,0.6)", bordercolor="rgba(0,0,0,0.2)", borderwidth=1)
     fig.update_layout(
+        # BUG FIX: this figure bypasses style_fig() (make_subplots() builds
+        # its own layout), so it needs its own template=None -- see the
+        # detailed comment in style_fig() above for why.
+        template=None,
         height=1000, title_text="FedWatch Dashboard", hovermode="closest",
         legend=dict(x=0.0, y=1.0, xanchor="left", yanchor="top", **legend_style),
         legend2=dict(x=0.56, y=1.0, xanchor="left", yanchor="top", **legend_style),
@@ -921,7 +935,8 @@ def main():
         header=dict(values=headers, fill_color="#2c3e50", font=dict(color="white", size=12), align="left"),
         cells=dict(values=[grid[c] for c in columns], fill_color=cell_colors, align="left", font=dict(size=11), height=26),
     )])
-    fig.update_layout(title=f"FOMC-Relevant Data Releases ({ZSCORE_WINDOW_YEARS}y z-score of period-over-period change)", height=140 + 38 * len(grid))
+    # BUG FIX: template=None -- see the detailed comment in style_fig() above.
+    fig.update_layout(template=None, title=f"FOMC-Relevant Data Releases ({ZSCORE_WINDOW_YEARS}y z-score of period-over-period change)", height=140 + 38 * len(grid))
     FIGURES["fomc_grid"] = fig
 
     # =========================================================================

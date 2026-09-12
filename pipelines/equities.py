@@ -94,6 +94,20 @@ SERIES_COLOR = {
 
 def style_fig(fig, title, yaxis_title=None, height=460, legend=True):
     fig.update_layout(
+        # BUG FIX: caused a site-wide outage the day this section shipped.
+        # go.Figure() defaults layout.template to plotly's full built-in
+        # theme object, and pio.write_json serializes that whole object
+        # (every trace type's default properties, not just the ones used
+        # here) into the JSON unless told otherwise. Streamlit Cloud's next
+        # dependency rebuild (triggered by this section's own requirements.txt
+        # change) installed plotly 7.0, which renamed 'scattermapbox' to
+        # 'scattermap' in that same template -- so every chart's JSON,
+        # written under plotly 6.9, failed to parse under plotly>=7 with
+        # "Invalid property specified ... 'scattermapbox'", taking down every
+        # section's charts, not just this one. template=None means nothing
+        # here depends on the default theme anyway -- every visual property
+        # is already set explicitly, here and in update_xaxes/update_yaxes.
+        template=None,
         title=dict(text=title, font=dict(size=15, color=INK_PRIMARY)),
         plot_bgcolor=SURFACE, paper_bgcolor=SURFACE,
         font=dict(color=INK_SECONDARY, size=12),

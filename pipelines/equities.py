@@ -54,14 +54,19 @@ are actually reported, only price does.
 Capital-structure comparison uses:
   - DGS10 (FRED) -- 10-year Treasury constant-maturity yield, risk-free,
     genuinely daily, plotted at native resolution (not resampled).
-  - BAA (FRED) -- Moody's Seasoned Baa Corporate Bond Yield, investment-
-    grade credit. Chosen over Aaa because Baa is the lowest investment-grade
-    tier and the more common "corporate credit" benchmark in this kind of
-    comparison; also has the longest history of any public IG credit series
-    (back to 1919), matching Shiller's own data span well. Moody's only
-    publishes this monthly -- there's no free daily-resolution version, the
-    same kind of hard data-availability ceiling as the forward-earnings-
-    yield gap above, not something resampling here could fix.
+  - BAA + DBAA (FRED) -- Moody's Seasoned Baa Corporate Bond Yield,
+    investment-grade credit. Chosen over Aaa because Baa is the lowest
+    investment-grade tier and the more common "corporate credit" benchmark
+    in this kind of comparison. Spliced from two FRED series rather than
+    one: monthly BAA has the longest history of any public IG credit
+    series (back to 1919, matching Shiller's own data span), but FRED also
+    carries a genuinely daily version, DBAA, starting 1986-01-02 -- an
+    earlier pass at this pipeline claimed no free daily version existed,
+    which was wrong (just hadn't checked for a "D"-prefixed daily variant).
+    get_baa_yield() below uses monthly BAA before DBAA's start and DBAA
+    (its native daily resolution, not resampled) from 1986 on, so the
+    modern era of the chart is genuinely daily instead of monthly-stepped,
+    without sacrificing the pre-1986 history.
 
 A high-yield/junk-credit line (ICE BofA effective yield, FRED
 BAMLH0A0HYM2EY) was tried and then dropped. It only cluttered the chart for
@@ -128,8 +133,8 @@ SERIES_COLOR = {
     "Dividend Yield": CAT[4],
     "10-Year Treasury": CAT[2],
     "Baa Corporate Credit": CAT[3],
-    "Implied Earnings Growth (Baa, 20yr)": CAT[7],
-    "Implied Forward Earnings Yield": CAT[1],
+    "Implied Earnings Growth": CAT[7],
+    "Implied Fwd Yield": CAT[1],
 }
 
 
@@ -279,6 +284,20 @@ def add_daily_tail(shiller):
     return pd.concat([shiller.loc[:anchor_date], tail])
 
 
+def get_baa_yield(start_date, end_date):
+    """Moody's Seasoned Baa Corporate Bond Yield, spliced for maximum
+    resolution: monthly `BAA` (back to 1919) before DBAA's start, genuinely
+    daily `DBAA` (native resolution, not resampled) from 1986-01-02 on. See
+    the module docstring for why an earlier version of this pipeline used
+    monthly-only.
+    """
+    baa_monthly = web.DataReader("BAA", "fred", start_date, end_date).squeeze()
+    baa_daily = web.DataReader("DBAA", "fred", start_date, end_date).squeeze().dropna()
+    if baa_daily.empty:
+        return baa_monthly
+    return pd.concat([baa_monthly.loc[baa_monthly.index < baa_daily.index.min()], baa_daily])
+
+
 def implied_earnings_growth(spot_yield, target_avg_yield, years=20):
     """Back into the constant annual earnings-growth rate g that reconciles
     today's trailing earnings yield with Baa credit, under one specific
@@ -392,7 +411,7 @@ def main():
 
     print("Pulling Treasury and investment-grade credit yields from FRED...")
     treasury_10y = web.DataReader("DGS10", "fred", start_date, end_date).squeeze()  # genuinely daily, plotted as-is
-    baa_yield = web.DataReader("BAA", "fred", start_date, end_date).squeeze()  # Moody's only publishes this monthly
+    baa_yield = get_baa_yield(start_date, end_date)  # monthly pre-1986, daily (DBAA) from 1986 on -- see get_baa_yield()
 
     earnings_yield = (shiller["eps"] / shiller["price"] * 100).rename("Trailing Earnings Yield")
     cape_yield = (1.0 / shiller["cape"] * 100).rename("CAPE Yield")
@@ -400,10 +419,12 @@ def main():
     treasury_10y = treasury_10y.rename("10-Year Treasury")
     baa_yield = baa_yield.rename("Baa Corporate Credit")
 
-    # Baa only prints monthly -- hold its last known value flat to match
-    # earnings_yield's daily-tail index (same "hold flat between updates"
-    # rule the daily tail itself uses for dividend/EPS/CAPE above), so every
-    # date has a target to solve implied_earnings_growth() against.
+    # Baa is monthly pre-1986 and only trades on bond-market business days
+    # even post-1986 (which don't perfectly coincide with equity trading
+    # days) -- ffill onto earnings_yield's own index (same "hold flat
+    # between updates" rule the daily tail itself uses for dividend/EPS/
+    # CAPE above) so every date has a target to solve
+    # implied_earnings_growth() against.
     print("Backing into implied earnings growth (spot yield vs. Baa, 20yr average)...")
     baa_aligned = baa_yield.reindex(earnings_yield.index, method="ffill")
     implied_growth = pd.Series(
@@ -411,16 +432,18 @@ def main():
             implied_earnings_growth(e / 100.0, b / 100.0) * 100.0 if pd.notna(e) and pd.notna(b) else np.nan
             for e, b in zip(earnings_yield, baa_aligned)
         ],
-        index=earnings_yield.index, name="Implied Earnings Growth (Baa, 20yr)",
+        index=earnings_yield.index, name="Implied Earnings Growth",
     )
-    # Implied Forward Earnings Yield = today's trailing yield compounded one
-    # year at the growth rate solved above, i.e. year-1 of the same path
-    # whose 20-year average was set equal to Baa. Unlike implied_growth
-    # itself (a rate, unbounded and wide-ranging), this is expressed in the
-    # same yield units as the other five series and stays in a comparable
-    # range (a single year of compounding at a plausible g moves the yield
-    # only modestly off its spot value) -- see the module docstring.
-    implied_fwd_yield = (earnings_yield * (1.0 + implied_growth / 100.0)).rename("Implied Forward Earnings Yield")
+    # Implied Fwd Yield = today's trailing yield compounded one year at the
+    # growth rate solved above, i.e. year-1 of the same path whose 20-year
+    # average was set equal to Baa. Unlike implied_growth itself (a rate,
+    # unbounded and wide-ranging), this is expressed in the same yield
+    # units as the other five series and stays in a comparable range (a
+    # single year of compounding at a plausible g moves the yield only
+    # modestly off its spot value) -- see the module docstring. Short name
+    # (vs. the more precise "Implied Forward Earnings Yield") to keep the
+    # now-6-entry legend on one row -- see the layout note below.
+    implied_fwd_yield = (earnings_yield * (1.0 + implied_growth / 100.0)).rename("Implied Fwd Yield")
 
     recession_bands = get_recession_bands(start_date, end_date)
 
@@ -433,31 +456,45 @@ def main():
     #
     # Implied Earnings Growth and Implied Forward Earnings Yield are both
     # MODELED series, not observed -- see implied_earnings_growth()'s
-    # docstring. The growth rate's crisis-quarter spikes (e.g. >20% during
+    # docstring. Only the growth-RATE line is hidden by default
+    # (visible="legendonly"): its crisis-quarter spikes (e.g. >20% during
     # 2008-09, when trailing earnings briefly collapsed) are real outputs
     # of the assumption, not noise, but they'd swamp the autoranged axis for
-    # the other five directly-observed series if shown by default; the
-    # forward-yield line stays in a comparable range to the others (one
-    # year of compounding moves a yield only modestly) but is kept alongside
-    # it under the same "derived, off by default" treatment for consistency
-    # rather than mixing defaults within one pair of related series. Both
-    # dashed (visual cue: derived, not observed) and `visible="legendonly"`
-    # -- one click in the legend to compare either against the others.
+    # the other five directly-observed series if shown at the same time.
+    # The forward-YIELD line stays in a comparable range to the others (one
+    # year of compounding moves a yield only modestly), so it's drawn like
+    # any other line, just dashed as a visual cue that it's derived.
     # =========================================================================
     fig = go.Figure()
-    for series in [treasury_10y, baa_yield, dividend_yield, earnings_yield, cape_yield]:
-        d = series.dropna()
-        fig.add_trace(go.Scatter(x=d.index, y=d.values, name=series.name, line=dict(color=SERIES_COLOR[series.name], width=2)))
-    for series in [implied_growth, implied_fwd_yield]:
+    for series in [treasury_10y, baa_yield, dividend_yield, earnings_yield, cape_yield, implied_fwd_yield]:
         d = series.dropna()
         fig.add_trace(go.Scatter(
             x=d.index, y=d.values, name=series.name,
-            line=dict(color=SERIES_COLOR[series.name], width=2, dash="dot"),
-            visible="legendonly",
+            line=dict(color=SERIES_COLOR[series.name], width=2, dash="dot" if series is implied_fwd_yield else "solid"),
         ))
+    d = implied_growth.dropna()
+    fig.add_trace(go.Scatter(
+        x=d.index, y=d.values, name=implied_growth.name,
+        line=dict(color=SERIES_COLOR[implied_growth.name], width=2, dash="dot"),
+        visible="legendonly",
+    ))
     add_recession_bands(fig, recession_bands)
     FIGURES["yield_comparison"] = style_fig(
-        fig, "S&P 500 Fundamental Yields vs. the Rest of the Capital Structure", yaxis_title="%"
+        fig, "S&P 500 Fundamental Yields vs. the Rest of the Capital Structure", yaxis_title="%", height=520
+    )
+    # BUG FIX (same shape as the legend/title collision this chart hit
+    # before dropping the HY line -- see that commit): back up to 7 legend
+    # entries now (6 visible + Implied Earnings Growth hidden-but-still-
+    # occupying-a-legend-slot). Even with short labels this wraps to 2
+    # lines below ~1000px container width and the default t=70/
+    # yanchor="bottom" gives a wrapped legend nowhere to go but on top of
+    # the title. t=110 (matches height=520 above) plus yanchor="top"
+    # (anchors the legend's TOP at y=1.0, hanging downward) fixes it the
+    # same way as before. Verified by rendering at 800px/1200px with
+    # kaleido: no collision at either width now.
+    FIGURES["yield_comparison"].update_layout(
+        margin=dict(l=60, r=30, t=110, b=40),
+        legend=dict(orientation="h", yanchor="top", y=1.0, xanchor="left", x=0, font=dict(size=11)),
     )
 
     # =========================================================================

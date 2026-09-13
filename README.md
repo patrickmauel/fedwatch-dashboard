@@ -22,12 +22,15 @@ Streamlit Community Cloud. Three live sections so far, built to add more:
   (trailing earnings yield, CAPE yield, dividend yield -- built from Robert
   Shiller's public dataset, extended with a live daily price tail so they
   update daily instead of stair-stepping once a month) plotted against the
-  risk-free 10-year Treasury and Baa investment-grade credit (FRED), plus a
-  modeled Implied Earnings Growth line (hidden by default -- click it in
-  the legend): the constant annual earnings growth rate that would make
-  the *average* earnings-yield path over the next 20 years equal today's
-  Baa yield. A true forward earnings yield is deliberately left out --
-  checked four candidate sources, none free/scriptable/continuously-
+  risk-free 10-year Treasury and Baa investment-grade credit (FRED, daily
+  from 1986 via `DBAA`, monthly `BAA` before that), plus a modeled Implied
+  Fwd Yield line -- today's trailing yield compounded one year at the
+  growth rate that would make the *average* earnings-yield path over the
+  next 20 years equal today's Baa yield. The growth rate itself (Implied
+  Earnings Growth) is also on the chart but hidden by default -- click it
+  in the legend -- since it swings far wider than every other line here. A
+  true (analyst-consensus) forward earnings yield is deliberately left out
+  -- checked four candidate sources, none free/scriptable/continuously-
   updated; see the docstring in `pipelines/equities.py` for the full
   rundown. Also has a second chart, **Curve Bias** -- a scatter of the
   S&P 500's short-term extension from its 21-day average against its

@@ -108,13 +108,13 @@ st.caption(
     "isn't shown -- checked S&P's own estimate file (403s scripted requests), Yardeni Research "
     "(paid Refinitiv feed behind the free charts), and multpl.com (confirmed trailing-only); none "
     "of them expose a free, continuously-updated series. See the pipeline's docstring for the "
-    "full rundown, including why a high-yield credit line was tried and then dropped. Two more "
-    "**modeled** lines are in the legend but hidden by default (click to show): Implied Earnings "
-    "Growth -- the constant annual growth rate that makes the *average* earnings yield over the "
-    "next 20 years equal today's Baa yield -- swings far wider than the five observed yields "
-    "(>20pp in both directions during real crises) and would flatten them if shown by default; "
-    "Implied Forward Earnings Yield is that same growth rate applied to just one year, so it stays "
-    "in yield-like range but is kept alongside it, off by default, for consistency."
+    "full rundown, including why a high-yield credit line was tried and then dropped. Also shown: "
+    "**Implied Forward Earnings Yield** (dashed) -- today's trailing yield compounded one year at "
+    "the growth rate that would make the *average* earnings yield over the next 20 years equal "
+    "today's Baa yield. One more **modeled** line, the growth rate itself (Implied Earnings "
+    "Growth), is in the legend but hidden by default (click to show) -- it swings far wider than "
+    "every other line here (>20pp in both directions during real crises) and would flatten them "
+    "if shown at the same time."
 )
 chart("yield_comparison")
 

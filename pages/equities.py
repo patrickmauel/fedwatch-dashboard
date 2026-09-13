@@ -45,8 +45,9 @@ meta = load_meta()
 st.title("Equities")
 
 REQUIRED_META_KEYS = {
-    "last_updated", "data_asof", "earnings_yield", "cape_yield", "dividend_yield",
-    "treasury_10y", "baa_yield", "earnings_yield_vs_baa",
+    "last_updated", "data_asof", "shiller_asof", "earnings_yield", "cape_yield", "dividend_yield",
+    "treasury_10y", "baa_yield", "earnings_yield_vs_baa", "implied_earnings_growth",
+    "curve_bias_extension", "curve_bias_trend", "curve_bias_asof",
 }
 if meta is None or not REQUIRED_META_KEYS.issubset(meta):
     # meta.json is written in one atomic json.dump() at the very end of a
@@ -68,9 +69,12 @@ age = dt.datetime.now(dt.timezone.utc) - updated
 staleness_note = ""
 if age > dt.timedelta(hours=36):
     staleness_note = f" :orange[(**{age.days}d {age.seconds // 3600}h** old -- check the daily refresh job)]"
-st.caption(f"Data as of **{meta['data_asof']}** (Shiller dataset), updated **{updated:%Y-%m-%d %H:%M UTC}**{staleness_note}")
+st.caption(
+    f"Price as of **{meta['data_asof']}**, Shiller fundamentals (dividends/EPS/CAPE) complete through "
+    f"**{meta['shiller_asof']}** -- updated **{updated:%Y-%m-%d %H:%M UTC}**{staleness_note}"
+)
 
-c1, c2, c3, c4, c5 = st.columns(5)
+c1, c2, c3, c4, c5, c6 = st.columns(6)
 c1.metric("Trailing Earnings Yield", f"{meta['earnings_yield']:.2f}%", help="Trailing 12-month S&P 500 EPS / price = 1 / trailing P/E")
 c2.metric("CAPE Yield", f"{meta['cape_yield']:.2f}%", help="1 / Shiller CAPE (price over 10-year average real EPS)")
 c3.metric("Dividend Yield", f"{meta['dividend_yield']:.2f}%")
@@ -80,28 +84,53 @@ c5.metric(
     help="Trailing earnings yield minus Moody's Baa corporate bond yield. Negative means equities currently "
          "compensate less than investment-grade credit -- one read of \"expensive.\"",
 )
+c6.metric(
+    "Implied Earnings Growth", f"{meta['implied_earnings_growth']:.1f}%",
+    help="The constant annual earnings growth rate, starting from latest TTM earnings, that makes the "
+         "*average* trailing-earnings-yield path over the next 20 years equal today's Baa yield -- i.e. "
+         "the growth priced in for stocks to merely break even against investment-grade credit. A model "
+         "output, not a forecast; see the pipeline's docstring.",
+)
 
 st.subheader("Fundamental equity yields vs. the capital structure")
 st.caption(
     "Three ways to price the S&P 500 as a yield -- trailing earnings yield (E/P), CAPE yield "
     "(cyclically-adjusted, smooths out any one quarter's depressed or inflated earnings), and "
-    "dividend yield -- next to the risk-free rate and two tiers of corporate credit. Reading down "
-    "the legend at any point in time is reading up the capital structure by risk: Treasuries, then "
-    "investment-grade (Baa) credit, then high-yield credit, then equities. A true *forward* "
-    "(analyst-consensus) earnings yield isn't shown -- there's no free, continuously-updated public "
-    "series for it (S&P's own estimate file requires a login); see the pipeline's docstring."
+    "dividend yield -- next to the risk-free 10-year Treasury and Baa investment-grade credit. "
+    "The equity lines update daily: EPS/dividends/CAPE's earnings base hold at their last-reported "
+    "value between Shiller's monthly updates while price moves live, same as how a real-time P/E or "
+    "dividend yield is computed anywhere else. A true *forward* (analyst-consensus) earnings yield "
+    "isn't shown -- checked S&P's own estimate file (403s scripted requests), Yardeni Research "
+    "(paid Refinitiv feed behind the free charts), and multpl.com (confirmed trailing-only); none "
+    "of them expose a free, continuously-updated series. See the pipeline's docstring for the "
+    "full rundown, including why a high-yield credit line was tried and then dropped. A sixth, "
+    "**modeled** line -- Implied Earnings Growth -- is in the legend but hidden by default (click "
+    "it to show): it swings far wider than the five observed yields (>20pp in both directions "
+    "during real crises) and would flatten them if shown by default."
 )
 chart("yield_comparison")
+
+st.divider()
+st.subheader("Curve bias")
 st.caption(
-    "High-yield credit (ICE BofA effective yield) only appears over roughly the last 3 years. "
-    "As of April 2026, ICE's license restricts every ICE-sourced series on FRED -- this one "
-    "included -- to a trailing 3-year window; the full history back to 1996 isn't available from "
-    "any free public source."
+    "How stretched the S&P 500's own price action currently is, in two dimensions, both scaled by "
+    "the trailing 21-trading-day (~1 month) volatility of daily point moves so they're directly "
+    "comparable: **y** is how far price sits above/below its own 21-day average right now (a "
+    "short-term extension read); **x** is the trailing-21-day return scaled by that same "
+    f"volatility's square-root-of-time-scaled 21-day expected move (a medium-term trend-strength "
+    "read). The muted cloud is the full available history "
+    f"(FRED's S&P 500 daily series is capped to a trailing ~10 years by licensing -- not this "
+    "page's choice); the highlighted path is the last 60 sessions, so the *direction* of travel "
+    "through this space is visible, not just today's snapshot. Top-right / bottom-left = price "
+    "extended in the same direction it has been trending (trend-following regime); top-left / "
+    "bottom-right = price extended *against* its own trailing trend (a possible mean-reversion "
+    "setup, or an early trend reversal -- this chart alone doesn't say which)."
 )
+chart("curve_bias")
 
 st.divider()
 st.caption(
     "Data: Robert Shiller's public U.S. stock market dataset (price, dividends, trailing EPS, "
-    "CAPE), FRED (Treasury yield, Moody's Baa corporate yield, ICE BofA high-yield effective "
-    "yield). Refreshed daily by GitHub Actions. Not investment advice."
+    "CAPE) extended with FRED's daily S&P 500 close, FRED (10-year Treasury yield, Moody's Baa "
+    "corporate yield). Refreshed daily by GitHub Actions. Not investment advice."
 )

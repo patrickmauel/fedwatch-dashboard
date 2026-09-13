@@ -1,7 +1,7 @@
 """
 Equities section pipeline: S&P 500 fundamental valuation yields plotted
 against the rest of the capital structure (risk-free Treasuries,
-investment-grade credit, high-yield credit).
+investment-grade credit).
 
 Pulls live data (Robert Shiller's public U.S. stock market dataset, FRED)
 and writes:
@@ -11,7 +11,7 @@ and writes:
 
 Run standalone: `python pipelines/equities.py` (from the repo root).
 
-Measures used, and why these four and not others:
+Measures used, and why these three and not others:
   - Trailing earnings yield (E/P) -- the simplest, most-cited valuation
     yield, built straight from Shiller's reported trailing EPS.
   - CAPE yield (1/CAPE) -- Shiller's cyclically-adjusted P/E (10-year real
@@ -20,45 +20,72 @@ Measures used, and why these four and not others:
     dip in raw earnings yield below -- CAPE yield barely moves).
   - Dividend yield (D/P) -- the cash actually paid out, independent of
     accounting earnings entirely.
-  - A true *forward* (analyst-consensus) earnings yield was deliberately
-    left out: there is no free, continuously-updated public time series
-    of S&P 500 forward EPS. S&P's own published estimate file requires a
-    login (spglobal.com returns 403 to anonymous/scripted requests) and
-    sell-side consensus (I/B/E/S-style) data is licensed. Faking a
-    "forward" yield by extrapolating trailing EPS growth would be a model
-    output dressed up as a data series, so it's excluded rather than
+  - A true *forward* (analyst-consensus) earnings yield is deliberately
+    left out -- checked four candidate sources, all dead ends for a free,
+    scriptable, continuously-updated time series:
+      1. S&P Dow Jones Indices' own published EPS-estimate file
+         (spglobal.com) -- returns 403 to any scripted request (tried a
+         browser User-Agent + Referer too), Akamai/Cloudflare-level bot
+         protection, not a simple auth wall.
+      2. Yardeni Research -- publishes plenty of free forward-P/E *charts*,
+         but they're rendered from a paid Refinitiv/LSEG Datastream feed
+         (product.datastream.com links, subscription-gated); no underlying
+         CSV/XLS.
+      3. multpl.com -- confirmed trailing-only ("Price to earnings ratio,
+         based on trailing twelve month 'as reported' earnings"); no
+         forward-P/E page exists on the site.
+      4. Sell-side consensus (I/B/E/S-style) data is licensed outright.
+    Extrapolating trailing EPS growth to fake a "forward" number would be a
+    model output dressed up as a data series, so it's excluded rather than
     approximated.
 
+Daily resolution: Shiller updates ie_data.xls once a month, days after
+month-end, so a pure Shiller-only chart would show earnings/CAPE/dividend
+yield frozen for 3-5 weeks at a time -- out of step with how these
+actually move (with the market, daily) between fundamentals updates and
+visually inconsistent with the Treasury line's genuine daily resolution.
+get_daily_tail() below extends the monthly series past Shiller's last
+published month using FRED's daily S&P 500 close, holding EPS/dividend/the
+CAPE ratio's implied earnings base flat at their last known value -- this
+is exactly how "today's P/E" or "today's dividend yield" is computed by
+any real-time source: the numerator doesn't move until new fundamentals
+are actually reported, only price does.
+
 Capital-structure comparison uses:
-  - DGS10 (FRED) -- 10-year Treasury constant-maturity yield, risk-free.
+  - DGS10 (FRED) -- 10-year Treasury constant-maturity yield, risk-free,
+    genuinely daily, plotted at native resolution (not resampled).
   - BAA (FRED) -- Moody's Seasoned Baa Corporate Bond Yield, investment-
     grade credit. Chosen over Aaa because Baa is the lowest investment-grade
     tier and the more common "corporate credit" benchmark in this kind of
     comparison; also has the longest history of any public IG credit series
-    (back to 1919), matching Shiller's own data span well.
-  - BAMLH0A0HYM2EY (FRED) -- ICE BofA US High Yield Index *effective yield*,
-    junk-grade credit. NOTE THE SUFFIX: the much more commonly-charted
-    series `BAMLH0A0HYM2` (no "EY") is the index's *option-adjusted
-    spread*, not a yield -- it reads as a plausible-looking ~2-3% number
-    but is actually the spread over Treasuries, and would have silently
-    plotted junk credit as yielding *less* than investment-grade Baa debt,
-    which is never true. Confirmed the "EY" series against BAMLC0A0CMEY
-    (investment-grade effective yield, same naming convention) reading
-    sensibly above Baa's own yield before shipping this.
-    KNOWN LIMITATION -- confirmed, not a code bug: every ICE-sourced series
-    on FRED (all `BAML*` IDs -- OAS or effective-yield, high-yield or
-    investment-grade) is now capped to a trailing ~3-year window. FRED's own
-    series-page notes for BAMLH0A0HYM2 say so explicitly: "Starting in April
-    2026, this series will only include 3 years of observations... For more
-    data, go to the source" (ICE Data Indices, whose license prohibits
-    redistributing the fuller history FRED used to carry back to 1996).
-    Checked whether picking a different series ID or hitting FRED's CSV
-    endpoint with an explicit `cosd=1996-01-01` sidesteps it -- neither does;
-    the truncation applies at the data-licensing level, not per-request.
-    There's no other free public source with a comparable continuous
-    high-yield credit series, so this is included anyway for the
-    recent-regime comparison it's still useful for -- the line just starts
-    a few years into the chart rather than spanning the full history.
+    (back to 1919), matching Shiller's own data span well. Moody's only
+    publishes this monthly -- there's no free daily-resolution version, the
+    same kind of hard data-availability ceiling as the forward-earnings-
+    yield gap above, not something resampling here could fix.
+
+A high-yield/junk-credit line (ICE BofA effective yield, FRED
+BAMLH0A0HYM2EY) was tried and then dropped. It only cluttered the chart for
+what it was worth: FRED's own series notes confirm that, starting April
+2026, ICE's license caps *every* ICE-sourced series on FRED (OAS or
+effective-yield, IG or HY alike) to a trailing ~3-year window -- "go to the
+source" for the fuller history FRED used to carry back to 1996. Checked
+whether a different series ID or an explicit `cosd=1996-01-01` sidesteps
+it -- neither does; the restriction is at the licensing level, not
+per-request. No free public source has a comparable continuous high-yield
+series, so a 3-year sliver of one more line wasn't worth the extra legend
+entry.
+
+Two derived (modeled, not observed) series, added after the above:
+  - Implied Earnings Growth -- back-solves the constant annual earnings
+    growth rate that would make the *average* trailing-earnings-yield path
+    over the next 20 years equal today's Baa yield. See
+    implied_earnings_growth()'s docstring for the exact assumption and why
+    it's plotted hidden-by-default on the yield_comparison chart rather
+    than folded into meta only.
+  - Curve Bias -- a second, unrelated chart (own FIGURES key
+    "curve_bias"): S&P 500 price's short-term extension from its 21-day
+    average vs. its medium-term (21-day) trend strength, both scaled by
+    trailing daily volatility. See get_curve_bias_data()'s docstring.
 """
 import datetime as dt
 import io
@@ -72,6 +99,7 @@ import pandas_datareader.data as web
 import plotly.graph_objects as go
 import plotly.io as pio
 import requests
+from scipy.optimize import brentq
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "equities"
 FIGURES_DIR = DATA_DIR / "figures"
@@ -92,13 +120,13 @@ SERIES_COLOR = {
     "Trailing Earnings Yield": CAT[0],
     "CAPE Yield": CAT[6],
     "Dividend Yield": CAT[4],
-    "10-Year Treasury (risk-free)": CAT[2],
-    "Baa Corporate (investment-grade)": CAT[3],
-    "ICE BofA High Yield (junk credit)": CAT[7],
+    "10-Year Treasury": CAT[2],
+    "Baa Corporate Credit": CAT[3],
+    "Implied Earnings Growth (Baa, 20yr)": CAT[7],
 }
 
 
-def style_fig(fig, title, yaxis_title=None, height=520, legend=True):
+def style_fig(fig, title, yaxis_title=None, height=440, legend=True, hovermode="x unified"):
     fig.update_layout(
         # BUG FIX: caused a site-wide outage the day this section shipped.
         # go.Figure() defaults layout.template to plotly's full built-in
@@ -117,22 +145,17 @@ def style_fig(fig, title, yaxis_title=None, height=520, legend=True):
         title=dict(text=title, font=dict(size=15, color=INK_PRIMARY)),
         plot_bgcolor=SURFACE, paper_bgcolor=SURFACE,
         font=dict(color=INK_SECONDARY, size=12),
-        hovermode="x unified",
+        hovermode=hovermode,
         height=height,
-        # BUG FIX: this chart's legend has 6 entries with genuinely long
-        # names (e.g. "Baa Corporate (investment-grade)") -- unlike
-        # rates_macro/currencies' 2-4 short entries, these wrap to 2 lines
-        # at typical container widths. The shared t=60/yanchor="bottom"
-        # combo those sections use gives a 2-line legend nowhere to go but
-        # on top of the title. t=110 (up from 60) reserves enough header
-        # room for title + a wrapped 2-line legend, and yanchor="top"
-        # (was "bottom") anchors the legend's TOP at y=1.0 so it hangs
-        # downward from there instead of growing upward into the title.
-        # height bumped 460->520 to match, so the plot area itself doesn't
-        # shrink. Verified by rendering at 800px and 1200px widths.
-        margin=dict(l=60, r=30, t=110, b=40),
+        margin=dict(l=60, r=30, t=70, b=40),
         showlegend=legend,
-        legend=dict(orientation="h", yanchor="top", y=1.0, xanchor="left", x=0, font=dict(size=11)),
+        # Short labels (below) keep these 5 entries on one row at normal
+        # container widths -- a 6-entry version with longer names (see the
+        # HY-series removal note in the module docstring) used to wrap to 2
+        # lines and collide with the title above; dropping HY and shortening
+        # labels fixed that at the source instead of just carving out more
+        # margin for a 2-line legend.
+        legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="left", x=0, font=dict(size=11)),
     )
     fig.update_xaxes(showgrid=False, showline=True, linecolor=BASELINE, ticks="outside", tickcolor=BASELINE, tickfont=dict(color=INK_MUTED))
     fig.update_yaxes(showgrid=True, gridcolor=GRIDLINE, gridwidth=1, zeroline=False, showline=False, tickfont=dict(color=INK_MUTED), title=dict(text=yaxis_title, font=dict(size=11, color=INK_MUTED)))
@@ -207,31 +230,182 @@ def get_shiller_data():
     return out
 
 
+def add_daily_tail(shiller):
+    """Extend Shiller's monthly series with a daily tail using FRED's daily
+    S&P 500 close (series SP500, available back to 2016 -- comfortably
+    covers however many weeks/months it's been since Shiller's last fully
+    reported month).
+
+    BUG CAUGHT WHILE BUILDING THIS: Shiller's price/CAPE columns are
+    sometimes populated 2-3 months ahead of dividend/EPS, which need actual
+    reported figures and lag more -- confirmed against the live file, which
+    had real price+CAPE for the trailing 3 months but NaN dividend/EPS for
+    all three. Anchoring on the literal last row (`shiller.iloc[-1]`) would
+    have propagated those NaNs through every "held flat" value below,
+    silently blanking the earnings-yield and dividend-yield lines for
+    however many months Shiller's own reporting lag runs. Anchoring on the
+    last row where dividend/EPS/CAPE are ALL present, and rebuilding
+    everything after that from daily price, avoids the gap entirely -- and
+    is a strictly better reconstruction of those partial months than
+    Shiller's own placeholder price-only rows anyway.
+
+    Holds trailing EPS and dividend flat at the anchor's last known value,
+    and scales the anchor's CAPE ratio by the live/anchor price ratio
+    (equivalent to holding CAPE's 10-year-average-real-earnings denominator
+    flat) -- see the module docstring for why this is the standard way to
+    compute a "live" P/E-style figure, not an approximation dressed up as
+    real data.
+    """
+    complete = shiller.dropna(subset=["dividend", "eps", "cape"])
+    anchor_date, anchor = complete.index[-1], complete.iloc[-1]
+
+    daily_price = web.DataReader("SP500", "fred", anchor_date, dt.date.today()).squeeze().dropna()
+    daily_price = daily_price.loc[daily_price.index > anchor_date]
+    if daily_price.empty:
+        return shiller.loc[:anchor_date]
+
+    tail = pd.DataFrame(index=daily_price.index)
+    tail["price"] = daily_price
+    tail["dividend"] = anchor["dividend"]
+    tail["eps"] = anchor["eps"]
+    tail["cape"] = anchor["cape"] * (daily_price / anchor["price"])
+    return pd.concat([shiller.loc[:anchor_date], tail])
+
+
+def implied_earnings_growth(spot_yield, target_avg_yield, years=20):
+    """Back into the constant annual earnings-growth rate g that reconciles
+    today's trailing earnings yield with Baa credit, under one specific
+    assumption: g solves
+
+        mean_{t=0..years-1}[ spot_yield * (1+g)^t ] == target_avg_yield
+
+    i.e. hold today's price fixed, let earnings compound at g for `years`
+    years starting from latest TTM earnings ("spot"), and require the
+    *average* of that path of future earnings yields to equal the Baa
+    yield -- read as "the equity risk premium, averaged over the next 20
+    years, works out to exactly zero vs. investment-grade credit." This is
+    a assumption to hang a number on, not a forecast -- a genuinely
+    priced equity risk premium would put the average yield *above* Baa,
+    so treat the result as "the growth rate needed for stocks to be
+    breakeven against Baa credit," not "the market's actual growth
+    expectation."
+
+    Closed form for the average of a geometric path:
+        mean = spot_yield * [(1+g)^years - 1] / (years * g)   (g != 0)
+    which is strictly increasing in g for spot_yield > 0 (g=-1 collapses
+    every future term after t=0 to zero, mean -> spot_yield/years; g=0
+    holds earnings flat, mean -> spot_yield; g>0 grows without bound) --
+    so there's exactly one root, found by bracketing + brentq rather than
+    a closed-form solve (no closed form exists for g here).
+
+    Returns NaN where no root exists in the search range (spot_yield <= 0,
+    e.g. an aggregate trailing-earnings collapse, or target_avg_yield <= 0)
+    rather than raising -- this runs once per historical date and a few
+    crisis-quarter gaps shouldn't break the whole series.
+    """
+    if not (spot_yield > 0 and target_avg_yield > 0):
+        return np.nan
+
+    def avg_path_yield(g):
+        if abs(g) < 1e-9:
+            return spot_yield
+        return spot_yield * ((1 + g) ** years - 1) / (years * g)
+
+    def f(g):
+        return avg_path_yield(g) - target_avg_yield
+
+    lo, hi = -0.99, 0.5
+    flo, fhi = f(lo), f(hi)
+    expansions = 0
+    while flo * fhi > 0 and hi < 5.0 and expansions < 20:
+        hi *= 1.5
+        fhi = f(hi)
+        expansions += 1
+    if flo * fhi > 0:
+        return np.nan
+    return brentq(f, lo, hi, xtol=1e-8)
+
+
+def get_curve_bias_data(start_date, end_date):
+    """"Curve bias": a phase-space view of the S&P 500's own price action --
+    how far price currently sits above/below its 21-day (~1 trading month)
+    average, plotted against how hard it has trended to get there, both
+    scaled by the *same* trailing-21-day volatility so the two axes are
+    directly comparable in "how many typical daily moves" units:
+
+      y = (price - 21d SMA) / (21d stdev of daily point changes)
+          short-term extension: how stretched price is from its own recent
+          average, in daily-vol units.
+      x = (price - price[21 sessions ago]) / (21d stdev of daily point
+          changes * sqrt(21))
+          medium-term trend strength: the trailing-month return scaled to
+          a *21-day-horizon* expected move (stdev * sqrt(21), the standard
+          square-root-of-time scaling), so x is "how many expected-sized
+          21-day moves did the market actually make."
+
+    Both use raw daily point changes (not % returns) for the vol estimate,
+    matching Bollinger-Band-style technical measures -- the 21-day rolling
+    window renormalizes locally, so this stays meaningful even though the
+    index's own level (and so its $-point volatility) has roughly tripled
+    over the history pulled here.
+
+    Data source: FRED series SP500 (S&P 500, daily close). FRED caps this
+    specific series to a trailing ~10 years regardless of the requested
+    start date -- a Dow Jones/S&P licensing restriction on FRED's end, the
+    same shape of limitation as the ICE high-yield series documented above
+    (a `cosd` override doesn't help there either; not re-tested here since
+    the FRED series notes state the same license-level cap). Shiller's own
+    price series would reach back further but is only monthly -- too coarse
+    for a 21-day-window daily-volatility measure -- so this chart's history
+    is shorter than the rest of the page's by construction, not a bug.
+    """
+    price = web.DataReader("SP500", "fred", start_date, end_date).squeeze().dropna()
+    daily_move = price.diff()
+    std21 = daily_move.rolling(21).std()
+    sma21 = price.rolling(21).mean()
+    df = pd.DataFrame({
+        "price": price,
+        "extension": (price - sma21) / std21,
+        "trend": (price - price.shift(21)) / (std21 * np.sqrt(21)),
+    }).dropna()
+    return df
+
+
 def main():
     print("Pulling Shiller S&P 500 dataset (price, dividends, trailing EPS, CAPE)...")
     shiller = get_shiller_data()
+    # Last month with real (non-NaN) dividend/EPS/CAPE -- see add_daily_tail's
+    # docstring for why this can trail shiller.index.max() by a couple months.
+    shiller_asof = shiller.dropna(subset=["dividend", "eps", "cape"]).index.max()
+    print(f"Shiller fundamentals complete through {shiller_asof:%Y-%m}; extending with a daily price tail...")
+    shiller = add_daily_tail(shiller)
 
     start_date = "1919-01-01"  # matches BAA's own start -- the longest-history credit series used here
     end_date = dt.date.today().strftime("%Y-%m-%d")
 
-    print("Pulling Treasury, investment-grade, and high-yield credit yields from FRED...")
-    treasury_10y = web.DataReader("DGS10", "fred", start_date, end_date).squeeze().resample("MS").mean()
-    baa_yield = web.DataReader("BAA", "fred", start_date, end_date).squeeze()
-    # NB: "EY" suffix = effective yield, NOT the same as BAMLH0A0HYM2 (that
-    # series is the option-adjusted spread) -- see the module docstring.
-    # FRED's public feed also only serves ~3 years of history for this
-    # ICE-sourced series regardless of the requested start date. Requesting
-    # the full range anyway costs nothing and means this line automatically
-    # gets longer if that restriction is ever lifted, with no code change
-    # needed here.
-    hy_yield = web.DataReader("BAMLH0A0HYM2EY", "fred", start_date, end_date).squeeze().resample("MS").mean()
+    print("Pulling Treasury and investment-grade credit yields from FRED...")
+    treasury_10y = web.DataReader("DGS10", "fred", start_date, end_date).squeeze()  # genuinely daily, plotted as-is
+    baa_yield = web.DataReader("BAA", "fred", start_date, end_date).squeeze()  # Moody's only publishes this monthly
 
     earnings_yield = (shiller["eps"] / shiller["price"] * 100).rename("Trailing Earnings Yield")
     cape_yield = (1.0 / shiller["cape"] * 100).rename("CAPE Yield")
     dividend_yield = (shiller["dividend"] / shiller["price"] * 100).rename("Dividend Yield")
-    treasury_10y = treasury_10y.rename("10-Year Treasury (risk-free)")
-    baa_yield = baa_yield.rename("Baa Corporate (investment-grade)")
-    hy_yield = hy_yield.rename("ICE BofA High Yield (junk credit)")
+    treasury_10y = treasury_10y.rename("10-Year Treasury")
+    baa_yield = baa_yield.rename("Baa Corporate Credit")
+
+    # Baa only prints monthly -- hold its last known value flat to match
+    # earnings_yield's daily-tail index (same "hold flat between updates"
+    # rule the daily tail itself uses for dividend/EPS/CAPE above), so every
+    # date has a target to solve implied_earnings_growth() against.
+    print("Backing into implied earnings growth (spot yield vs. Baa, 20yr average)...")
+    baa_aligned = baa_yield.reindex(earnings_yield.index, method="ffill")
+    implied_growth = pd.Series(
+        [
+            implied_earnings_growth(e / 100.0, b / 100.0) * 100.0 if pd.notna(e) and pd.notna(b) else np.nan
+            for e, b in zip(earnings_yield, baa_aligned)
+        ],
+        index=earnings_yield.index, name="Implied Earnings Growth (Baa, 20yr)",
+    )
 
     recession_bands = get_recession_bands(start_date, end_date)
 
@@ -241,15 +415,71 @@ def main():
     # earnings yield swings hard in a real recession (e.g. ~0.8% in mid-2009
     # as trailing GAAP earnings collapsed) and clipping would read as a data
     # gap rather than what actually happened.
+    #
+    # Implied Earnings Growth is a MODELED series, not an observed yield --
+    # see implied_earnings_growth()'s docstring -- and its crisis-quarter
+    # spikes (e.g. >20% during 2008-09, when trailing earnings briefly
+    # collapsed) are real outputs of the assumption, not noise, but they'd
+    # swamp the autoranged axis for the other five directly-observed series
+    # if shown by default. Added dashed (visual cue: derived, not observed)
+    # and `visible="legendonly"` -- one click in the legend to compare it
+    # against the others, off by default so it doesn't distort the default
+    # view.
     # =========================================================================
     fig = go.Figure()
-    for series in [treasury_10y, baa_yield, hy_yield, dividend_yield, earnings_yield, cape_yield]:
+    for series in [treasury_10y, baa_yield, dividend_yield, earnings_yield, cape_yield]:
         d = series.dropna()
         fig.add_trace(go.Scatter(x=d.index, y=d.values, name=series.name, line=dict(color=SERIES_COLOR[series.name], width=2)))
+    d = implied_growth.dropna()
+    fig.add_trace(go.Scatter(
+        x=d.index, y=d.values, name=implied_growth.name,
+        line=dict(color=SERIES_COLOR[implied_growth.name], width=2, dash="dot"),
+        visible="legendonly",
+    ))
     add_recession_bands(fig, recession_bands)
     FIGURES["yield_comparison"] = style_fig(
         fig, "S&P 500 Fundamental Yields vs. the Rest of the Capital Structure", yaxis_title="%"
     )
+
+    # =========================================================================
+    # Curve bias: S&P 500 price action's own short-term extension vs.
+    # medium-term trend strength, both in trailing-21-day-vol units. See
+    # get_curve_bias_data()'s docstring for the exact construction. Rendered
+    # as three layers rather than one flat scatter: the full (~10yr, FRED's
+    # license cap) history as light context, the last 60 sessions as a
+    # visible path so the *direction* of travel through this space is
+    # readable (a single snapshot point can't show that), and today singled
+    # out. hovermode="closest" overrides style_fig's default "x unified" --
+    # unified-on-x only makes sense for a time series sharing one x-axis,
+    # and this chart's x-axis is a value, not a date.
+    # =========================================================================
+    print("Computing curve bias (price extension vs. trend, in trailing-vol units)...")
+    cb = get_curve_bias_data(start_date, end_date)
+    trail = cb.iloc[-60:]
+    latest = cb.iloc[-1]
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=cb["trend"], y=cb["extension"], mode="markers", name="Full history",
+        marker=dict(size=4, color=INK_MUTED, opacity=0.30), hoverinfo="skip",
+    ))
+    fig.add_trace(go.Scatter(
+        x=trail["trend"], y=trail["extension"], mode="lines+markers", name="Last 60 sessions",
+        line=dict(color=CAT[0], width=1.5), marker=dict(size=5, color=CAT[0]),
+        text=[d.strftime("%Y-%m-%d") for d in trail.index], hovertemplate="%{text}<br>x=%{x:.2f}  y=%{y:.2f}<extra></extra>",
+    ))
+    fig.add_trace(go.Scatter(
+        x=[latest["trend"]], y=[latest["extension"]], mode="markers", name="Latest",
+        marker=dict(size=12, color=CAT[7], line=dict(color=SURFACE, width=1.5)),
+        text=[cb.index[-1].strftime("%Y-%m-%d")], hovertemplate="%{text}<br>x=%{x:.2f}  y=%{y:.2f}<extra></extra>",
+    ))
+    fig.add_hline(y=0, line=dict(color=BASELINE, width=1, dash="dot"))
+    fig.add_vline(x=0, line=dict(color=BASELINE, width=1, dash="dot"))
+    FIGURES["curve_bias"] = style_fig(
+        fig, "Curve Bias: Short-Term Extension vs. Medium-Term Trend",
+        yaxis_title="Extension vs. 21d avg (σ of daily moves)", height=520, hovermode="closest",
+    )
+    FIGURES["curve_bias"].update_xaxes(title=dict(text="21d trend (σ of daily moves, √21-scaled)", font=dict(size=11, color=INK_MUTED)))
 
     # =========================================================================
     # Save everything
@@ -258,17 +488,20 @@ def main():
     for key, f in FIGURES.items():
         pio.write_json(f, FIGURES_DIR / f"{key}.json")
 
-    latest_month = shiller.index.max()
     META.update(
         last_updated=dt.datetime.now(dt.timezone.utc).isoformat(),
-        data_asof=latest_month.strftime("%Y-%m-%d"),
+        data_asof=shiller.index.max().strftime("%Y-%m-%d"),
+        shiller_asof=shiller_asof.strftime("%Y-%m-%d"),
         earnings_yield=round(float(earnings_yield.dropna().iloc[-1]), 2),
         cape_yield=round(float(cape_yield.dropna().iloc[-1]), 2),
         dividend_yield=round(float(dividend_yield.dropna().iloc[-1]), 2),
         treasury_10y=round(float(treasury_10y.dropna().iloc[-1]), 2),
         baa_yield=round(float(baa_yield.dropna().iloc[-1]), 2),
-        hy_yield=round(float(hy_yield.dropna().iloc[-1]), 2) if hy_yield.dropna().size else None,
         earnings_yield_vs_baa=round(float(earnings_yield.dropna().iloc[-1] - baa_yield.dropna().iloc[-1]), 2),
+        implied_earnings_growth=round(float(implied_growth.dropna().iloc[-1]), 2) if implied_growth.dropna().size else None,
+        curve_bias_extension=round(float(latest["extension"]), 2),
+        curve_bias_trend=round(float(latest["trend"]), 2),
+        curve_bias_asof=cb.index[-1].strftime("%Y-%m-%d"),
     )
     with open(DATA_DIR / "meta.json", "w") as fh:
         json.dump(META, fh, indent=2)

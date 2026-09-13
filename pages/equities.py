@@ -136,6 +136,12 @@ st.caption(
 )
 chart("curve_bias")
 
+col_ext, col_trend = st.columns(2)
+col_ext.caption("The y-axis on its own, over time: short-term extension above/below the 21-day average.")
+chart("curve_bias_extension", container=col_ext)
+col_trend.caption("The x-axis on its own, over time: medium-term (21-day) trend strength.")
+chart("curve_bias_trend", container=col_trend)
+
 st.divider()
 st.caption(
     "Data: Robert Shiller's public U.S. stock market dataset (price, dividends, trailing EPS, "

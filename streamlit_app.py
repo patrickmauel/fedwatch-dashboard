@@ -14,11 +14,14 @@ refreshes daily.
 """
 import streamlit as st
 
-st.set_page_config(page_title="Macro Dashboard", page_icon="\U0001F4C8", layout="wide")
+# Material Symbols (":material/name:"), not emoji, for both the browser-tab
+# icon and the nav -- reads as dashboard chrome instead of a chat/consumer
+# app. Pairs with .streamlit/config.toml's muted theme.
+st.set_page_config(page_title="Macro Dashboard", page_icon=":material/monitoring:", layout="wide")
 
-rates_macro = st.Page("pages/rates_macro.py", title="Rates & Macro", icon="\U0001F4C8", default=True)
-equities = st.Page("pages/equities.py", title="Equities", icon="\U0001F4C9")
-currencies = st.Page("pages/currencies.py", title="Currencies", icon="\U0001F4B1")
+rates_macro = st.Page("pages/rates_macro.py", title="Rates & Macro", icon=":material/monitoring:", default=True)
+equities = st.Page("pages/equities.py", title="Equities", icon=":material/trending_up:")
+currencies = st.Page("pages/currencies.py", title="Currencies", icon=":material/currency_exchange:")
 
 pg = st.navigation([rates_macro, equities, currencies])
 pg.run()

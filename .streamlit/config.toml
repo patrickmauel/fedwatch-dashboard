@@ -1,0 +1,13 @@
+# Streamlit theme. Default (unthemed) Streamlit ships a bright red
+# primaryColor and its own display font -- reads as a consumer/demo app,
+# not a finance dashboard. Values below reuse the SAME ink/surface tokens
+# already used across pipelines/*.py's style_fig() (see CAT/INK_*/SURFACE
+# in each pipeline), so the app chrome and the Plotly charts read as one
+# coherent system instead of two different products stitched together.
+[theme]
+base = "light"
+primaryColor = "#2a78d6"
+backgroundColor = "#fcfcfb"
+secondaryBackgroundColor = "#f2f1ec"
+textColor = "#0b0b0b"
+font = "sans serif"

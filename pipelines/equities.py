@@ -538,6 +538,31 @@ def main():
     FIGURES["curve_bias"].update_xaxes(title=dict(text="21d trend (σ of daily moves, √21-scaled)", font=dict(size=11, color=INK_MUTED)))
 
     # =========================================================================
+    # Curve bias components, plotted individually over time. The scatter
+    # above shows the two axes against EACH OTHER but drops the date
+    # dimension entirely (x/y position only, no sense of when) -- these two
+    # single-series time-series charts are the same y_extension/x_trend
+    # values cb already has, just each plotted against its own date so the
+    # standalone behavior of each axis (not just their joint position) is
+    # readable. Single series each -> no legend needed (the title names it).
+    # =========================================================================
+    ext_fig = go.Figure()
+    ext_fig.add_trace(go.Scatter(x=cb.index, y=cb["extension"], mode="lines", line=dict(color=CAT[0], width=1.5)))
+    ext_fig.add_hline(y=0, line=dict(color=BASELINE, width=1, dash="dot"))
+    add_recession_bands(ext_fig, recession_bands, xmin=cb.index[0])
+    FIGURES["curve_bias_extension"] = style_fig(
+        ext_fig, "Curve Bias -- Y: Short-Term Extension", yaxis_title="σ of daily moves", height=280, legend=False,
+    )
+
+    trend_fig = go.Figure()
+    trend_fig.add_trace(go.Scatter(x=cb.index, y=cb["trend"], mode="lines", line=dict(color=CAT[1], width=1.5)))
+    trend_fig.add_hline(y=0, line=dict(color=BASELINE, width=1, dash="dot"))
+    add_recession_bands(trend_fig, recession_bands, xmin=cb.index[0])
+    FIGURES["curve_bias_trend"] = style_fig(
+        trend_fig, "Curve Bias -- X: Medium-Term Trend", yaxis_title="σ of daily moves, √21-scaled", height=280, legend=False,
+    )
+
+    # =========================================================================
     # Save everything
     # =========================================================================
     print(f"Saving {len(FIGURES)} figures + meta to {DATA_DIR}...")

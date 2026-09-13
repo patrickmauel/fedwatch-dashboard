@@ -35,7 +35,7 @@ Streamlit Community Cloud. Three live sections so far, built to add more:
   rundown. Also has a second chart, **Curve Bias** -- a scatter of the
   S&P 500's short-term extension from its 21-day average against its
   medium-term (21-day) trend strength, both scaled by trailing daily
-  volatility.
+  volatility, plus each axis plotted individually over time underneath it.
 
 ## How a section is structured
 
@@ -118,3 +118,9 @@ so it prompts for the `repo` scope this time.
   call in that section's `pages/<name>.py`.
 - **FOMC grid series**: edit the `rows = [...]` list in
   `pipelines/rates_macro.py`'s FOMC grid section.
+- **App-wide theme** (Streamlit chrome, not the charts): `.streamlit/config.toml`.
+  Uses the same ink/surface tokens as the charts' own `style_fig()` (see
+  `CAT`/`INK_*`/`SURFACE` duplicated at the top of each `pipelines/<name>.py`)
+  so the two don't drift apart -- change both together if you touch either.
+  Page/nav icons are Material Symbols (`:material/name:` in `streamlit_app.py`),
+  not emoji, on purpose.

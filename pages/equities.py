@@ -47,7 +47,7 @@ st.title("Equities")
 REQUIRED_META_KEYS = {
     "last_updated", "data_asof", "shiller_asof", "earnings_yield", "cape_yield", "dividend_yield",
     "treasury_10y", "baa_yield", "earnings_yield_vs_baa", "implied_earnings_growth",
-    "curve_bias_extension", "curve_bias_trend", "curve_bias_asof",
+    "implied_fwd_earnings_yield", "curve_bias_extension", "curve_bias_trend", "curve_bias_asof",
 }
 if meta is None or not REQUIRED_META_KEYS.issubset(meta):
     # meta.json is written in one atomic json.dump() at the very end of a
@@ -74,7 +74,7 @@ st.caption(
     f"**{meta['shiller_asof']}** -- updated **{updated:%Y-%m-%d %H:%M UTC}**{staleness_note}"
 )
 
-c1, c2, c3, c4, c5, c6 = st.columns(6)
+c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
 c1.metric("Trailing Earnings Yield", f"{meta['earnings_yield']:.2f}%", help="Trailing 12-month S&P 500 EPS / price = 1 / trailing P/E")
 c2.metric("CAPE Yield", f"{meta['cape_yield']:.2f}%", help="1 / Shiller CAPE (price over 10-year average real EPS)")
 c3.metric("Dividend Yield", f"{meta['dividend_yield']:.2f}%")
@@ -91,6 +91,11 @@ c6.metric(
          "the growth priced in for stocks to merely break even against investment-grade credit. A model "
          "output, not a forecast; see the pipeline's docstring.",
 )
+c7.metric(
+    "Implied Fwd Earnings Yield", f"{meta['implied_fwd_earnings_yield']:.2f}%",
+    help="Trailing earnings yield compounded one year at the Implied Earnings Growth rate -- year 1 of "
+         "that same modeled path, expressed as a yield rather than a growth rate.",
+)
 
 st.subheader("Fundamental equity yields vs. the capital structure")
 st.caption(
@@ -103,10 +108,13 @@ st.caption(
     "isn't shown -- checked S&P's own estimate file (403s scripted requests), Yardeni Research "
     "(paid Refinitiv feed behind the free charts), and multpl.com (confirmed trailing-only); none "
     "of them expose a free, continuously-updated series. See the pipeline's docstring for the "
-    "full rundown, including why a high-yield credit line was tried and then dropped. A sixth, "
-    "**modeled** line -- Implied Earnings Growth -- is in the legend but hidden by default (click "
-    "it to show): it swings far wider than the five observed yields (>20pp in both directions "
-    "during real crises) and would flatten them if shown by default."
+    "full rundown, including why a high-yield credit line was tried and then dropped. Two more "
+    "**modeled** lines are in the legend but hidden by default (click to show): Implied Earnings "
+    "Growth -- the constant annual growth rate that makes the *average* earnings yield over the "
+    "next 20 years equal today's Baa yield -- swings far wider than the five observed yields "
+    "(>20pp in both directions during real crises) and would flatten them if shown by default; "
+    "Implied Forward Earnings Yield is that same growth rate applied to just one year, so it stays "
+    "in yield-like range but is kept alongside it, off by default, for consistency."
 )
 chart("yield_comparison")
 

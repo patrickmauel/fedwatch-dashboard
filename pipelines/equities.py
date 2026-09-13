@@ -75,13 +75,19 @@ per-request. No free public source has a comparable continuous high-yield
 series, so a 3-year sliver of one more line wasn't worth the extra legend
 entry.
 
-Two derived (modeled, not observed) series, added after the above:
+Three derived (modeled, not observed) series, added after the above:
   - Implied Earnings Growth -- back-solves the constant annual earnings
     growth rate that would make the *average* trailing-earnings-yield path
     over the next 20 years equal today's Baa yield. See
     implied_earnings_growth()'s docstring for the exact assumption and why
     it's plotted hidden-by-default on the yield_comparison chart rather
     than folded into meta only.
+  - Implied Forward Earnings Yield -- today's trailing yield compounded one
+    year at that same solved growth rate (year 1 of the path whose 20-year
+    average was set equal to Baa). Not a real forward yield in the sense
+    of an analyst-consensus estimate (see the "true forward" discussion
+    above) -- it's one year of the same model output, expressed in yield
+    terms instead of a growth rate.
   - Curve Bias -- a second, unrelated chart (own FIGURES key
     "curve_bias"): S&P 500 price's short-term extension from its 21-day
     average vs. its medium-term (21-day) trend strength, both scaled by
@@ -123,6 +129,7 @@ SERIES_COLOR = {
     "10-Year Treasury": CAT[2],
     "Baa Corporate Credit": CAT[3],
     "Implied Earnings Growth (Baa, 20yr)": CAT[7],
+    "Implied Forward Earnings Yield": CAT[1],
 }
 
 
@@ -406,6 +413,14 @@ def main():
         ],
         index=earnings_yield.index, name="Implied Earnings Growth (Baa, 20yr)",
     )
+    # Implied Forward Earnings Yield = today's trailing yield compounded one
+    # year at the growth rate solved above, i.e. year-1 of the same path
+    # whose 20-year average was set equal to Baa. Unlike implied_growth
+    # itself (a rate, unbounded and wide-ranging), this is expressed in the
+    # same yield units as the other five series and stays in a comparable
+    # range (a single year of compounding at a plausible g moves the yield
+    # only modestly off its spot value) -- see the module docstring.
+    implied_fwd_yield = (earnings_yield * (1.0 + implied_growth / 100.0)).rename("Implied Forward Earnings Yield")
 
     recession_bands = get_recession_bands(start_date, end_date)
 
@@ -416,26 +431,30 @@ def main():
     # as trailing GAAP earnings collapsed) and clipping would read as a data
     # gap rather than what actually happened.
     #
-    # Implied Earnings Growth is a MODELED series, not an observed yield --
-    # see implied_earnings_growth()'s docstring -- and its crisis-quarter
-    # spikes (e.g. >20% during 2008-09, when trailing earnings briefly
-    # collapsed) are real outputs of the assumption, not noise, but they'd
-    # swamp the autoranged axis for the other five directly-observed series
-    # if shown by default. Added dashed (visual cue: derived, not observed)
-    # and `visible="legendonly"` -- one click in the legend to compare it
-    # against the others, off by default so it doesn't distort the default
-    # view.
+    # Implied Earnings Growth and Implied Forward Earnings Yield are both
+    # MODELED series, not observed -- see implied_earnings_growth()'s
+    # docstring. The growth rate's crisis-quarter spikes (e.g. >20% during
+    # 2008-09, when trailing earnings briefly collapsed) are real outputs
+    # of the assumption, not noise, but they'd swamp the autoranged axis for
+    # the other five directly-observed series if shown by default; the
+    # forward-yield line stays in a comparable range to the others (one
+    # year of compounding moves a yield only modestly) but is kept alongside
+    # it under the same "derived, off by default" treatment for consistency
+    # rather than mixing defaults within one pair of related series. Both
+    # dashed (visual cue: derived, not observed) and `visible="legendonly"`
+    # -- one click in the legend to compare either against the others.
     # =========================================================================
     fig = go.Figure()
     for series in [treasury_10y, baa_yield, dividend_yield, earnings_yield, cape_yield]:
         d = series.dropna()
         fig.add_trace(go.Scatter(x=d.index, y=d.values, name=series.name, line=dict(color=SERIES_COLOR[series.name], width=2)))
-    d = implied_growth.dropna()
-    fig.add_trace(go.Scatter(
-        x=d.index, y=d.values, name=implied_growth.name,
-        line=dict(color=SERIES_COLOR[implied_growth.name], width=2, dash="dot"),
-        visible="legendonly",
-    ))
+    for series in [implied_growth, implied_fwd_yield]:
+        d = series.dropna()
+        fig.add_trace(go.Scatter(
+            x=d.index, y=d.values, name=series.name,
+            line=dict(color=SERIES_COLOR[series.name], width=2, dash="dot"),
+            visible="legendonly",
+        ))
     add_recession_bands(fig, recession_bands)
     FIGURES["yield_comparison"] = style_fig(
         fig, "S&P 500 Fundamental Yields vs. the Rest of the Capital Structure", yaxis_title="%"
@@ -499,6 +518,7 @@ def main():
         baa_yield=round(float(baa_yield.dropna().iloc[-1]), 2),
         earnings_yield_vs_baa=round(float(earnings_yield.dropna().iloc[-1] - baa_yield.dropna().iloc[-1]), 2),
         implied_earnings_growth=round(float(implied_growth.dropna().iloc[-1]), 2) if implied_growth.dropna().size else None,
+        implied_fwd_earnings_yield=round(float(implied_fwd_yield.dropna().iloc[-1]), 2) if implied_fwd_yield.dropna().size else None,
         curve_bias_extension=round(float(latest["extension"]), 2),
         curve_bias_trend=round(float(latest["trend"]), 2),
         curve_bias_asof=cb.index[-1].strftime("%Y-%m-%d"),

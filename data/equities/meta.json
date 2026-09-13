@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-09-13T18:29:32.655083+00:00",
+  "last_updated": "2026-09-13T18:50:34.009654+00:00",
   "data_asof": "2026-09-11",
   "shiller_asof": "2026-06-01",
   "earnings_yield": 3.86,
@@ -9,6 +9,7 @@
   "baa_yield": 6.32,
   "earnings_yield_vs_baa": -2.46,
   "implied_earnings_growth": 4.91,
+  "implied_fwd_earnings_yield": 4.05,
   "curve_bias_extension": -0.76,
   "curve_bias_trend": -0.45,
   "curve_bias_asof": "2026-09-11"

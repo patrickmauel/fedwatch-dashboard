@@ -2,11 +2,18 @@
 Rates & Macro page.
 
 Reads only the files pipelines/rates_macro.py writes to data/rates_macro/
--- never touches the network itself. Run the pipeline first
+-- OUR code never touches the network itself. Run the pipeline first
 (`python pipelines/rates_macro.py` from the repo root), then open the
 dashboard via streamlit_app.py (this page is one section of it, not a
 standalone entry point -- no st.set_page_config here, that lives in
 streamlit_app.py since it can only be called once per app).
+
+One exception to "never touches the network": the NY Fed Nowcast tab
+embeds newyorkfed.org's own live Nowcast tool in an iframe -- that's the
+VIEWER's browser loading it directly (nothing in this pipeline/page fetches
+or caches it), so it's exempt from the "pipeline writes data/, page only
+reads data/" pattern every other tab follows. See that tab's own comment
+below for why an iframe was used instead of pulling the data in.
 """
 import datetime as dt
 import json
@@ -15,6 +22,7 @@ from pathlib import Path
 import pandas as pd
 import plotly.io as pio
 import streamlit as st
+import streamlit.components.v1 as components
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "rates_macro"
 FIGURES_DIR = DATA_DIR / "figures"
@@ -95,8 +103,8 @@ st.caption(
     f"**{meta['fcst_end']}**. Treasury curve as of **{meta['treasury_asof_date']}**."
 )
 
-tab_overview, tab_grid, tab_credit, tab_labor = st.tabs(
-    ["Overview", "FOMC Data Grid", "Credit Markets", "Labor Market"]
+tab_overview, tab_grid, tab_credit, tab_labor, tab_nowcast = st.tabs(
+    ["Overview", "FOMC Data Grid", "Credit Markets", "Labor Market", "NY Fed Nowcast"]
 )
 
 with tab_overview:
@@ -148,6 +156,24 @@ with tab_labor:
     chart("labor_payrolls")
     chart("labor_claims")
     chart("labor_demand")
+
+with tab_nowcast:
+    NOWCAST_URL = "https://www.newyorkfed.org/research/policy/nowcast/#/nowcast"
+    st.subheader("NY Fed Staff Nowcast")
+    st.caption(
+        "The New York Fed's own real-time GDP nowcast, including its **Data Flow** breakdown of "
+        "how each quarterly GDP estimate has moved as new data releases came in -- embedded live "
+        "from newyorkfed.org, not reproduced here. This is the tool itself (their JS renders it), "
+        "so it always reflects whichever quarter(s) the Fed currently tracks -- nothing to update "
+        "on our end as quarters roll over. Considered pulling the underlying data in instead (the "
+        "house pattern every other tab uses), but couldn't find a stable, documented public data "
+        "endpoint behind their interactive -- it's loaded by a minified in-page app, not a plain "
+        "API or a linked CSV/XLSX. Confirmed newyorkfed.org sends no `X-Frame-Options` or CSP "
+        "`frame-ancestors` header, so embedding is actually permitted (many .gov/.org sites block "
+        "this outright). If it renders blank for you, your browser/extensions may still be "
+        f"blocking the frame -- [open it directly]({NOWCAST_URL}) instead."
+    )
+    components.iframe(NOWCAST_URL, height=900, scrolling=True)
 
 st.divider()
 st.caption(

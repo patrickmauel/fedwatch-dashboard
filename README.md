@@ -8,8 +8,11 @@ Streamlit Community Cloud. Three live sections so far, built to add more:
   the Treasury term structure, built on the NY Fed's Laubach-Williams r*
   model, a fitted Taylor-rule policy reaction function, and a 1,000-path
   Monte Carlo simulation. Plus credit-market and labor-market context
-  charts and a z-score-flagged grid of FOMC-relevant data releases. Deployable
-  counterpart to the `FedWatch_v2.ipynb` notebook in `../new_jupyter/`.
+  charts, a z-score-flagged grid of FOMC-relevant data releases, and a tab
+  embedding the NY Fed's own live Nowcast tool (iframe, not pulled-in data
+  -- see the comment in `pages/rates_macro.py`'s Nowcast tab for why).
+  Deployable counterpart to the `FedWatch_v2.ipynb` notebook in
+  `../new_jupyter/`.
 - **Currencies** (live) -- the Holston-Laubach-Williams multi-country
   natural-rate model (US / Euro Area / Canada): GDP, inflation, and policy
   rate per country with the same Monte Carlo approach as Rates & Macro, an

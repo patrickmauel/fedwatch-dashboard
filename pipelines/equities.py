@@ -80,20 +80,30 @@ per-request. No free public source has a comparable continuous high-yield
 series, so a 3-year sliver of one more line wasn't worth the extra legend
 entry.
 
-Three derived (modeled, not observed) series, added after the above:
+Four derived (modeled, not observed) series, added after the above:
   - Implied Earnings Growth -- back-solves the constant annual earnings
     growth rate that would make the *average* trailing-earnings-yield path
     over the next 20 years equal today's Baa yield. See
-    implied_earnings_growth()'s docstring for the exact assumption and why
-    it's plotted hidden-by-default on the yield_comparison chart rather
-    than folded into meta only.
+    implied_earnings_growth()'s docstring for the exact assumption. Plotted
+    hidden-by-default on yield_comparison (wrong axis/scale to show
+    alongside observed yields by default) AND, at full size, on its own
+    "implied_vs_actual_growth" chart next to realized EPS growth -- see
+    below.
   - Implied Forward Earnings Yield -- today's trailing yield compounded one
     year at that same solved growth rate (year 1 of the path whose 20-year
     average was set equal to Baa). Not a real forward yield in the sense
     of an analyst-consensus estimate (see the "true forward" discussion
     above) -- it's one year of the same model output, expressed in yield
     terms instead of a growth rate.
-  - Curve Bias -- a second, unrelated chart (own FIGURES key
+  - Implied vs. Actual Earnings Growth -- a third chart (own FIGURES key
+    "implied_vs_actual_growth"): Implied Earnings Growth next to realized
+    S&P 500 trailing-EPS growth two ways (YoY, and MoM compounded to an
+    annual rate) -- "what growth is priced in" vs. "what growth has
+    actually happened." See actual_eps_growth()'s docstring, and the
+    comment at this chart's y-axis range override for a real 2009 GFC
+    artifact (a single month's EPS recovery compounds to a +465,663%
+    "annualized" print) that's deliberately kept out of the default view.
+  - Curve Bias -- a fourth, unrelated chart (own FIGURES key
     "curve_bias"): S&P 500 price's short-term extension from its 21-day
     average vs. its medium-term (21-day) trend strength, both scaled by
     trailing daily volatility. See get_curve_bias_data()'s docstring.
@@ -397,6 +407,42 @@ def get_curve_bias_data(start_date, end_date):
     return df
 
 
+def actual_eps_growth(eps_monthly):
+    """Realized S&P 500 trailing-EPS growth, two ways -- for comparing
+    against Implied Earnings Growth's *assumed* rate, i.e. "what growth is
+    priced in" vs. "what growth has actually happened."
+
+    Takes the MONTHLY-only EPS series (pre-add_daily_tail), not the
+    daily-tail-extended one main() uses for the yield calculations -- the
+    daily tail deliberately holds EPS flat between Shiller's monthly
+    reports (see add_daily_tail()'s docstring), so growth computed against
+    it would read the most recent weeks as "growth collapsed to zero,"
+    a reporting-lag artifact, not a real signal.
+
+    Uses `.asof()` rather than a fixed-integer `.pct_change(n)`: Shiller's
+    raw monthly series isn't perfectly evenly spaced (occasional skipped or
+    doubled-up report rows), and asof() looks up the latest EPS value
+    at-or-before each target date directly, so it stays correct regardless
+    of exact row spacing.
+
+    Returns (yoy, mom_annualized), both in percent:
+      - yoy: EPS now vs. ~12 months ago -- the standard, smoother read.
+      - mom_annualized: EPS now vs. ~1 month ago, compounded to an annual
+        rate ((1+g)^12 - 1) -- a faster, much noisier read of the most
+        recent trend (a single month's noise gets amplified ~12x by the
+        compounding -- expect this line to swing far harder than yoy).
+    """
+    def lagged(months):
+        lag_dates = eps_monthly.index - pd.DateOffset(months=months)
+        out = eps_monthly.asof(lag_dates)
+        out.index = eps_monthly.index
+        return out
+
+    yoy = (eps_monthly / lagged(12) - 1.0) * 100.0
+    mom_annualized = ((eps_monthly / lagged(1)) ** 12 - 1.0) * 100.0
+    return yoy.rename("Actual EPS Growth (YoY)"), mom_annualized.rename("Actual EPS Growth (MoM, annualized)")
+
+
 def main():
     print("Pulling Shiller S&P 500 dataset (price, dividends, trailing EPS, CAPE)...")
     shiller = get_shiller_data()
@@ -404,6 +450,7 @@ def main():
     # docstring for why this can trail shiller.index.max() by a couple months.
     shiller_asof = shiller.dropna(subset=["dividend", "eps", "cape"]).index.max()
     print(f"Shiller fundamentals complete through {shiller_asof:%Y-%m}; extending with a daily price tail...")
+    eps_monthly = shiller["eps"].copy()  # pre-tail EPS only -- see actual_eps_growth()'s docstring
     shiller = add_daily_tail(shiller)
 
     start_date = "1919-01-01"  # matches BAA's own start -- the longest-history credit series used here
@@ -496,6 +543,46 @@ def main():
         margin=dict(l=60, r=30, t=110, b=40),
         legend=dict(orientation="h", yanchor="top", y=1.0, xanchor="left", x=0, font=dict(size=11)),
     )
+
+    # =========================================================================
+    # Implied vs. Actual Earnings Growth: pulls Implied Earnings Growth out
+    # of yield_comparison (where it's hidden by default and on a %-yield
+    # axis that doesn't really fit a growth RATE) into its own full-size
+    # chart, next to realized EPS growth two ways -- "what growth is priced
+    # in" vs. "what growth has actually happened." See actual_eps_growth()'s
+    # docstring for the YoY/MoM-annualized construction and why it's built
+    # off the pre-tail monthly EPS, not the daily-tail-extended series.
+    # =========================================================================
+    print("Computing realized EPS growth (YoY, MoM annualized)...")
+    eps_yoy, eps_mom_annualized = actual_eps_growth(eps_monthly)
+
+    fig = go.Figure()
+    d = implied_growth.dropna()
+    fig.add_trace(go.Scatter(
+        x=d.index, y=d.values, name=implied_growth.name,
+        line=dict(color=SERIES_COLOR[implied_growth.name], width=2, dash="dot"),
+    ))
+    d = eps_yoy.dropna()
+    fig.add_trace(go.Scatter(x=d.index, y=d.values, name=eps_yoy.name, line=dict(color=CAT[0], width=2)))
+    d = eps_mom_annualized.dropna()
+    fig.add_trace(go.Scatter(x=d.index, y=d.values, name=eps_mom_annualized.name, line=dict(color=CAT[2], width=1)))
+    fig.add_hline(y=0, line=dict(color=BASELINE, width=1, dash="dot"))
+    add_recession_bands(fig, recession_bands)
+    FIGURES["implied_vs_actual_growth"] = style_fig(fig, "Implied vs. Actual Earnings Growth", yaxis_title="%")
+    # DELIBERATE EXCEPTION to "never hard-clip, let it autorange" (see the
+    # yield_comparison chart's own comment above for the usual rule): EPS
+    # troughed at $6.86 in Mar 2009 (real trailing GAAP earnings, confirmed
+    # against Shiller's raw data) then roughly doubled month-over-month in
+    # Oct 2009 -- ^12 compounding that single month turns a real ~100% MoM
+    # move into a +465,663% "annualized" print. That's not a data gap or a
+    # bug to clip away quietly; it's a real artifact of ANNUALIZING a
+    # single month through a v-shaped earnings trough. Sets the default
+    # VIEWPORT (autorange=False) to roughly the 1st-99th percentile of both
+    # realized-growth series (comfortably covers Implied Earnings Growth's
+    # own -24.7/+20.7 full range too) -- underlying data is untouched and
+    # the 2009 spike is still reachable by zooming out, same pattern as the
+    # labor charts' 2020-outlier handling in pages/rates_macro.py.
+    FIGURES["implied_vs_actual_growth"].update_yaxes(range=[-75, 175], autorange=False)
 
     # =========================================================================
     # Curve bias: S&P 500 price action's own short-term extension vs.

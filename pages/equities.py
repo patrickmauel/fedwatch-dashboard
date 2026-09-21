@@ -114,9 +114,26 @@ st.caption(
     "today's Baa yield. One more **modeled** line, the growth rate itself (Implied Earnings "
     "Growth), is in the legend but hidden by default (click to show) -- it swings far wider than "
     "every other line here (>20pp in both directions during real crises) and would flatten them "
-    "if shown at the same time."
+    "if shown at the same time. That growth rate gets its own chart, next, alongside how much "
+    "S&P 500 earnings have actually grown historically."
 )
 chart("yield_comparison")
+
+st.divider()
+st.subheader("Implied vs. actual earnings growth")
+st.caption(
+    "The same Implied Earnings Growth line from above (dotted), at full size, next to how much "
+    "S&P 500 trailing EPS has *actually* grown -- two ways: **YoY** (year-over-year, the standard, "
+    "smoother read) and **MoM, annualized** (month-over-month, compounded to an annual rate -- a "
+    "faster but much noisier read of the most recent trend; a single month's noise gets amplified "
+    "roughly 12x by the compounding, so expect it to swing harder than YoY). The y-axis opens on a "
+    "fixed range rather than autoscaling to full history: trailing EPS troughed at $6.86 in March "
+    "2009 during the financial crisis, and its recovery months compound (for MoM) into a real but "
+    "chart-breaking **+465,663%** \"annualized\" print that October -- true to the formula, not "
+    "useful to look at by default. Zoom out (or use the chart toolbar's autoscale icon) to see the "
+    "full history, including the Depression-era collapse and that 2009 spike."
+)
+chart("implied_vs_actual_growth")
 
 st.divider()
 st.subheader("Curve bias")

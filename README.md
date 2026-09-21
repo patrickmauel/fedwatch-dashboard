@@ -35,7 +35,11 @@ Streamlit Community Cloud. Three live sections so far, built to add more:
   true (analyst-consensus) forward earnings yield is deliberately left out
   -- checked four candidate sources, none free/scriptable/continuously-
   updated; see the docstring in `pipelines/equities.py` for the full
-  rundown. Also has a second chart, **Curve Bias** -- a scatter of the
+  rundown. A second chart, **Implied vs. Actual Earnings Growth**, puts
+  that same Implied Earnings Growth line next to realized S&P 500 EPS
+  growth (YoY, and MoM compounded to an annual rate) -- what growth is
+  priced in vs. what's actually happened. Also has a third chart, **Curve
+  Bias** -- a scatter of the
   S&P 500's short-term extension from its 21-day average against its
   medium-term (21-day) trend strength, both scaled by trailing daily
   volatility, plus each axis plotted individually over time underneath it.

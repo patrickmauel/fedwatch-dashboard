@@ -24,7 +24,6 @@ import pandas_datareader.data as web
 import plotly.graph_objects as go
 import plotly.io as pio
 import statsmodels.formula.api as smf
-from plotly.subplots import make_subplots
 from scipy.interpolate import PchipInterpolator
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "rates_macro"
@@ -238,6 +237,15 @@ def style_fig(fig, title, yaxis_title=None, height=380, legend=True, default_vie
     outliers outside the visible window (e.g. a 2020 spike) -- pass
     default_yrange=[lo, hi] (computed from just the data inside the
     default_view window) to fix that; autoscale still resets both axes."""
+    # MOBILE REWRITE (2026-09-21): a horizontal legend that wraps to 2+
+    # lines has nowhere to go but on top of the title under a fixed
+    # t=60/yanchor="bottom" -- and on an actual phone width (~360-390px)
+    # almost any 3+-entry legend wraps (see pipelines/equities.py's
+    # style_fig for the fuller version of this comment). Default whenever
+    # legend=True; charts with legend=False keep the tighter original
+    # margin since there's no legend to collide with.
+    margin_t = 110 if legend else 60
+    legend_yanchor = "top" if legend else "bottom"
     fig.update_layout(
         # BUG FIX (site-wide outage, see pipelines/equities.py's style_fig for
         # the full story): leaving the default template attached means
@@ -254,9 +262,9 @@ def style_fig(fig, title, yaxis_title=None, height=380, legend=True, default_vie
         font=dict(color=INK_SECONDARY, size=12),
         hovermode="x unified",
         height=height,
-        margin=dict(l=60, r=30, t=60, b=40),
+        margin=dict(l=60, r=30, t=margin_t, b=40),
         showlegend=legend,
-        legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="left", x=0, font=dict(size=11)),
+        legend=dict(orientation="h", yanchor=legend_yanchor, y=1.0, xanchor="left", x=0, font=dict(size=11)),
     )
     fig.update_xaxes(showgrid=False, showline=True, linecolor=BASELINE, ticks="outside", tickcolor=BASELINE, tickfont=dict(color=INK_MUTED))
     fig.update_yaxes(showgrid=True, gridcolor=GRIDLINE, gridwidth=1, zeroline=False, showline=False, tickfont=dict(color=INK_MUTED), title=dict(text=yaxis_title, font=dict(size=11, color=INK_MUTED)))
@@ -572,55 +580,75 @@ def main():
     # =========================================================================
     print("Building charts...")
 
-    def add_fan(fig, row, col, legend, df_fcst, color, name, y_start):
+    # MOBILE REWRITE (2026-09-21): this used to be ONE make_subplots(2, 2)
+    # figure -- 4 panels, each with its own positioned mini-legend
+    # (legend/legend2/legend3/legend4, placed by x/y coordinate), at a
+    # shared height=1000. That only worked at desktop width: a single
+    # Plotly figure can't reflow, so on a phone the whole 2x2 grid just
+    # shrank to ~180px-wide quadrants with illegible axes and 4-6-entry
+    # legends crammed into corners. Now 4 INDEPENDENT figures, each through
+    # the normal style_fig() (one top legend, same as every other chart in
+    # this app) -- Streamlit stacks/reflows independent charts naturally
+    # (same st.columns(2)-that-stacks-on-mobile pattern already used
+    # everywhere else on this page), which one shared subplot grid cannot.
+    # Every trace now gets an EXPLICIT color -- necessary because splitting
+    # into separate figures resets Plotly's automatic color-cycling per
+    # figure, and two traces that happened to get different default colors
+    # sharing one subplot could silently collide once split apart.
+    def add_fan(fig, df_fcst, color, name, y_start):
         d = df_fcst.loc[y_start:]
         lo = pd.to_numeric(d.quantile(0.16, axis=1))
         hi = pd.to_numeric(d.quantile(0.84, axis=1))
         mean = pd.to_numeric(d.mean(axis=1))
-        fig.add_trace(go.Scatter(x=lo.index, y=lo.values, mode="lines", line=dict(width=0), showlegend=False, hoverinfo="skip"), row=row, col=col)
-        fig.add_trace(
-            go.Scatter(x=hi.index, y=hi.values, mode="lines", line=dict(width=0), fill="tonexty",
-                       fillcolor=color.replace("rgb", "rgba").replace(")", ",0.25)"), name=f"{name} 1-sigma", hoverinfo="skip", legend=legend),
-            row=row, col=col,
-        )
-        fig.add_trace(go.Scatter(x=mean.index, y=mean.values, mode="lines", line=dict(color=color, dash="dash"), name=f"{name} mean", legend=legend), row=row, col=col)
+        fig.add_trace(go.Scatter(x=lo.index, y=lo.values, mode="lines", line=dict(width=0), showlegend=False, hoverinfo="skip"))
+        fig.add_trace(go.Scatter(
+            x=hi.index, y=hi.values, mode="lines", line=dict(width=0), fill="tonexty",
+            fillcolor=color.replace("rgb", "rgba").replace(")", ",0.25)"), name=f"{name} 1-sigma", hoverinfo="skip",
+        ))
+        fig.add_trace(go.Scatter(x=mean.index, y=mean.values, mode="lines", line=dict(color=color, dash="dash"), name=f"{name} mean"))
 
     y_start = "2023"
-    fig = make_subplots(
-        rows=2, cols=2,
-        subplot_titles=("rGDP Realizations and Projections", "PCE Realizations and Projections", "GDP Modeled", "Fed Funds & r*: Model Projection vs. Treasury-Implied Forward Path"),
-        vertical_spacing=0.12, horizontal_spacing=0.08,
-    )
-    L1, L2, L3, L4 = "legend", "legend2", "legend3", "legend4"
+    panel_height = 440
+    recession_bands = get_recession_bands(start_date, end_date)
 
+    fig = go.Figure()
     d = df_gdpnowcast.loc[y_start:]
-    fig.add_trace(go.Scatter(x=d.index, y=d.values, name="rGDP Nowcast", line=dict(width=2), legend=L1), row=1, col=1)
+    fig.add_trace(go.Scatter(x=d.index, y=d.values, name="rGDP Nowcast", line=dict(width=2, color=CAT[0])))
     d = df_gdpnowcast_annual.loc[y_start:]
-    fig.add_trace(go.Scatter(x=d.index, y=d.values, name="rGDP Nowcast Annual", line=dict(width=2), legend=L1), row=1, col=1)
+    fig.add_trace(go.Scatter(x=d.index, y=d.values, name="rGDP Nowcast Annual", line=dict(width=2, color=CAT[3])))
     d = rGDP.loc[y_start:]
-    fig.add_trace(go.Scatter(x=d.index, y=d.values, name="rGDP Actual YoY", line=dict(width=2, color="green"), legend=L1), row=1, col=1)
-    add_fan(fig, 1, 1, L1, rGDP_g_fcst, "rgb(44,160,44)", "rGDP growth", y_start)
+    fig.add_trace(go.Scatter(x=d.index, y=d.values, name="rGDP Actual YoY", line=dict(width=2, color="green")))
+    add_fan(fig, rGDP_g_fcst, "rgb(44,160,44)", "rGDP growth", y_start)
+    add_recession_bands(fig, recession_bands, xmin=y_start)
+    FIGURES["rgdp_realizations"] = style_fig(fig, "rGDP Realizations and Projections", yaxis_title="YoY %", height=panel_height)
 
+    fig = go.Figure()
     d = df_mct_total.loc[y_start:]
-    fig.add_trace(go.Scatter(x=d.index, y=d["16th percentile"], mode="lines", line=dict(width=0), showlegend=False, hoverinfo="skip"), row=1, col=2)
-    fig.add_trace(go.Scatter(x=d.index, y=d["84th percentile"], mode="lines", line=dict(width=0), fill="tonexty", fillcolor="rgba(128,128,128,0.3)", name="MCT range", legend=L2), row=1, col=2)
-    fig.add_trace(go.Scatter(x=d.index, y=d["Median"], name="MCT", line=dict(color="green"), legend=L2), row=1, col=2)
+    fig.add_trace(go.Scatter(x=d.index, y=d["16th percentile"], mode="lines", line=dict(width=0), showlegend=False, hoverinfo="skip"))
+    fig.add_trace(go.Scatter(x=d.index, y=d["84th percentile"], mode="lines", line=dict(width=0), fill="tonexty", fillcolor="rgba(128,128,128,0.3)", name="MCT range"))
+    fig.add_trace(go.Scatter(x=d.index, y=d["Median"], name="MCT", line=dict(color="green")))
     d = pce.loc[y_start:]
-    fig.add_trace(go.Scatter(x=d.index, y=d.values, name="PCE", line=dict(color="blue"), legend=L2), row=1, col=2)
+    fig.add_trace(go.Scatter(x=d.index, y=d.values, name="PCE", line=dict(color="blue")))
     d = pce_core.loc[y_start:]
-    fig.add_trace(go.Scatter(x=d.index, y=d.values, name="PCE Core", line=dict(color="orange"), legend=L2), row=1, col=2)
-    add_fan(fig, 1, 2, L2, pi_fcst, "rgb(44,160,44)", "inflation", y_start)
+    fig.add_trace(go.Scatter(x=d.index, y=d.values, name="PCE Core", line=dict(color="orange")))
+    add_fan(fig, pi_fcst, "rgb(44,160,44)", "inflation", y_start)
+    add_recession_bands(fig, recession_bands, xmin=y_start)
+    FIGURES["pce_realizations"] = style_fig(fig, "PCE Realizations and Projections", yaxis_title="%", height=panel_height)
 
+    fig = go.Figure()
     d = df_rGDP_potential_level.loc[y_start:]
-    fig.add_trace(go.Scatter(x=d.index, y=d.values, name="rGDP potential", line=dict(color="blue"), legend=L3), row=2, col=1)
-    add_fan(fig, 2, 1, L3, rGDP_potential_fcst, "rgb(31,119,180)", "potential GDP", y_start)
+    fig.add_trace(go.Scatter(x=d.index, y=d.values, name="rGDP potential", line=dict(color="blue")))
+    add_fan(fig, rGDP_potential_fcst, "rgb(31,119,180)", "potential GDP", y_start)
     d = rGDP_level.loc[y_start:, "GDPC1"]
-    fig.add_trace(go.Scatter(x=d.index, y=d.values, name="rGDP", line=dict(color="green"), legend=L3), row=2, col=1)
-    add_fan(fig, 2, 1, L3, rGDP_fcst, "rgb(44,160,44)", "GDP", y_start)
+    fig.add_trace(go.Scatter(x=d.index, y=d.values, name="rGDP", line=dict(color="green")))
+    add_fan(fig, rGDP_fcst, "rgb(44,160,44)", "GDP", y_start)
+    add_recession_bands(fig, recession_bands, xmin=y_start)
+    FIGURES["gdp_modeled"] = style_fig(fig, "GDP Modeled", yaxis_title="$bn (SAAR)", height=panel_height)
 
+    fig = go.Figure()
     d = ff.loc[y_start:]
-    fig.add_trace(go.Scatter(x=d.index, y=d.values, name="Fed Funds (effective)", line=dict(color="blue"), legend=L4), row=2, col=2)
-    add_fan(fig, 2, 2, L4, ff_fcst, "rgb(44,160,44)", "FF", y_start)
+    fig.add_trace(go.Scatter(x=d.index, y=d.values, name="Fed Funds (effective)", line=dict(color="blue")))
+    add_fan(fig, ff_fcst, "rgb(44,160,44)", "FF", y_start)
     # r* (Laubach-Williams natural rate): trailing = LW's own one-sided
     # estimates (df_lwrstar, already pulled in section 4 above); forward =
     # rstar_0 from the SAME Monte Carlo paths that produce ff_fcst above --
@@ -629,32 +657,23 @@ def main():
     # it gets a genuine 1000-path distribution, not a single deterministic
     # line held flat. Reuses add_fan() unchanged, same as every other panel.
     d = df_lwrstar["rstar"].loc[y_start:]
-    fig.add_trace(go.Scatter(x=d.index, y=d.values, name="r* (Laubach-Williams)", line=dict(color="rgb(148,103,189)"), legend=L4), row=2, col=2)
+    fig.add_trace(go.Scatter(x=d.index, y=d.values, name="r* (Laubach-Williams)", line=dict(color="rgb(148,103,189)")))
     rstar_fcst = df_sims["rstar_0"]
-    add_fan(fig, 2, 2, L4, rstar_fcst, "rgb(148,103,189)", "r*", y_start)
+    add_fan(fig, rstar_fcst, "rgb(148,103,189)", "r*", y_start)
     d = fwd_daily.loc[y_start:pi_fcst.index.max()]
-    fig.add_trace(go.Scatter(x=d.index, y=d.values, name="Treasury-implied forward", line=dict(color="black", dash="dash"), legend=L4), row=2, col=2)
-
-    legend_style = dict(font=dict(size=10), bgcolor="rgba(255,255,255,0.6)", bordercolor="rgba(0,0,0,0.2)", borderwidth=1)
-    fig.update_layout(
-        # BUG FIX: this figure bypasses style_fig() (make_subplots() builds
-        # its own layout), so it needs its own template=None -- see the
-        # detailed comment in style_fig() above for why.
-        template=None,
-        height=1000, title_text="FedWatch Dashboard", hovermode="closest",
-        legend=dict(x=0.0, y=1.0, xanchor="left", yanchor="top", **legend_style),
-        legend2=dict(x=0.56, y=1.0, xanchor="left", yanchor="top", **legend_style),
-        legend3=dict(x=0.0, y=0.42, xanchor="left", yanchor="top", **legend_style),
-        legend4=dict(x=0.56, y=0.42, xanchor="left", yanchor="top", **legend_style),
+    fig.add_trace(go.Scatter(x=d.index, y=d.values, name="Treasury-implied forward", line=dict(color="black", dash="dash")))
+    add_recession_bands(fig, recession_bands, xmin=y_start)
+    # 7 legend entries -- style_fig()'s default margin/legend positioning
+    # handles the resulting wrap at any width, mobile included.
+    FIGURES["fed_funds_rstar"] = style_fig(
+        fig, "Fed Funds & r* vs. Treasury Forward", yaxis_title="%", height=panel_height,
     )
-    FIGURES["main_dashboard"] = fig
 
     # =========================================================================
     # 11. Credit market context
     # =========================================================================
     gdp = web.DataReader("GDP", "fred", start_date, end_date).squeeze()
     gdp_d = gdp.resample("D").ffill()
-    recession_bands = get_recession_bands(start_date, end_date)
     credit_ystart = "2000"
 
     household_total = web.DataReader("CMDEBT", "fred", start_date, end_date).squeeze() / 1000.0
@@ -764,7 +783,7 @@ def main():
     d = interest_to_gdp_growth.loc[credit_ystart:]
     fig.add_trace(go.Scatter(x=d.index, y=d.values, line=dict(color=CAT[0], width=2)))
     add_recession_bands(fig, recession_bands, xmin=credit_ystart)
-    FIGURES["gov_int_vs_growth"] = style_fig(fig, "Federal Interest Payments vs. Nominal GDP Growth", yaxis_title="Interest / annual $ GDP growth (x)", legend=False, height=320)
+    FIGURES["gov_int_vs_growth"] = style_fig(fig, "Federal Interest vs. GDP Growth", yaxis_title="Interest / annual $ GDP growth (x)", legend=False, height=320)
 
     # =========================================================================
     # 12. Labor market context
@@ -802,7 +821,7 @@ def main():
         fig.add_trace(go.Scatter(x=d.index, y=d.values, name=name, line=dict(color=color, width=2)))
     add_recession_bands(fig, recession_bands, xmin=labor_ystart)
     FIGURES["labor_participation"] = style_fig(
-        fig, "Labor Force Participation & Employment-Population Ratio", yaxis_title="%",
+        fig, "Participation & Emp-Pop Ratio", yaxis_title="%",
         default_view=labor_view,
         default_yrange=_padded_range(laborpart.loc[labor_view_start:], emp_pop.loc[labor_view_start:]),
     )
@@ -918,37 +937,19 @@ def main():
     ]
     df_fomc_grid = pd.DataFrame(rows)
 
-    def _zscore_color(z, vmax=3.0):
-        if pd.isna(z):
-            return "rgba(255,255,255,1)"
-        t = max(-1.0, min(1.0, z / vmax))
-        if t >= 0:
-            r, g, b = 255, int(255 - t * 155), int(255 - t * 155)
-        else:
-            t = -t
-            r, g, b = int(255 - t * 155), int(255 - t * 155), 255
-        return f"rgba({r},{g},{b},1)"
-
-    grid = df_fomc_grid.copy()
-    grid["LatestRelease"] = grid["LatestRelease"].dt.strftime("%Y-%m-%d")
-    grid["ZscoreDisplay"] = grid["Zscore"].apply(lambda z: f"{z:+.2f}" if pd.notna(z) else "n/a")
-    grid["Flag"] = grid["Zscore"].apply(lambda z: "outsized" if pd.notna(z) and abs(z) >= 2 else ("elevated" if pd.notna(z) and abs(z) >= 1.5 else ""))
-
-    category_bg = {"Growth": "#eef4fb", "Labor": "#eefaf0", "Inflation": "#fdf3ec", "Rates": "#f5f0fb"}
-    cat_col_colors = [category_bg.get(c, "white") for c in grid["Category"]]
-    zscore_colors = [_zscore_color(z) for z in grid["Zscore"]]
-
-    columns = ["Category", "Series", "LatestRelease", "PriorValue", "LatestValue", "Change", "ZscoreDisplay", "Flag"]
-    headers = ["Category", "Series", "Latest Release", "Prior", "Latest", "Change", f"Z-score ({ZSCORE_WINDOW_YEARS}y)", "Flag"]
-    cell_colors = [zscore_colors if col == "ZscoreDisplay" else cat_col_colors for col in columns]
-
-    fig = go.Figure(data=[go.Table(
-        header=dict(values=headers, fill_color="#2c3e50", font=dict(color="white", size=12), align="left"),
-        cells=dict(values=[grid[c] for c in columns], fill_color=cell_colors, align="left", font=dict(size=11), height=26),
-    )])
-    # BUG FIX: template=None -- see the detailed comment in style_fig() above.
-    fig.update_layout(template=None, title=f"FOMC-Relevant Data Releases ({ZSCORE_WINDOW_YEARS}y z-score of period-over-period change)", height=140 + 38 * len(grid))
-    FIGURES["fomc_grid"] = fig
+    # MOBILE REWRITE (2026-09-21): this used to be a go.Table figure --
+    # rendered as a fixed-pixel raster, 8 columns had to squeeze into
+    # whatever width the container gave it, and on a phone that meant
+    # ~40px/column with every value truncated to 2-3 illegible characters,
+    # plus the same title-clipping problem as every long Plotly title (see
+    # style_fig()'s MOBILE REWRITE comment). Dropped the Table figure
+    # entirely -- pages/rates_macro.py now renders this same data as a
+    # native st.dataframe (a real HTML/React grid, not a raster), which
+    # handles narrow widths with actual horizontal touch-scrolling instead
+    # of shrinking text to fit. The category/z-score background coloring
+    # that used to live here (category_bg / _zscore_color) is rebuilt on
+    # the page side via a pandas Styler, since that's what st.dataframe
+    # actually accepts for cell coloring.
 
     # =========================================================================
     # 14. Save everything

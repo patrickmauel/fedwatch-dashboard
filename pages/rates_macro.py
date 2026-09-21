@@ -109,7 +109,19 @@ tab_overview, tab_grid, tab_credit, tab_labor, tab_nowcast = st.tabs(
 
 with tab_overview:
     st.subheader("GDP, inflation, fed funds & term structure")
-    chart("main_dashboard")
+    # MOBILE REWRITE (2026-09-21): this used to be one make_subplots(2, 2)
+    # figure ("main_dashboard") -- see the matching MOBILE REWRITE comment
+    # in pipelines/rates_macro.py's main() for why that broke on a phone.
+    # Now 4 independent charts, 2 per row via st.columns(2) -- the same
+    # pattern already used everywhere else on this page (labor, credit),
+    # which Streamlit stacks to a single column automatically below phone
+    # width, unlike one shared subplot grid.
+    col1, col2 = st.columns(2)
+    chart("rgdp_realizations", col1)
+    chart("pce_realizations", col2)
+    col3, col4 = st.columns(2)
+    chart("gdp_modeled", col3)
+    chart("fed_funds_rstar", col4)
 
 with tab_grid:
     st.subheader("FOMC-relevant data releases")
@@ -118,11 +130,49 @@ with tab_grid:
         "series' own trailing 10-year distribution of such changes. |z| >= 2 flagged **outsized**, "
         "1.5-2 **elevated**."
     )
-    chart("fomc_grid")
     grid_df = load_grid()
-    if grid_df is not None:
-        with st.expander("Raw table"):
-            st.dataframe(grid_df, use_container_width=True, hide_index=True)
+    if grid_df is None:
+        st.warning("Missing FOMC grid data. Run `python pipelines/rates_macro.py` to generate it.")
+    else:
+        # MOBILE REWRITE (2026-09-21): this used to be a go.Table PLOTLY
+        # FIGURE (8 fixed-pixel columns, illegible once squeezed to phone
+        # width -- see the matching comment in pipelines/rates_macro.py's
+        # FOMC grid section). st.dataframe is a real HTML/React grid: it
+        # horizontal-scrolls with an actual finger swipe on a phone instead
+        # of shrinking text to fit, and the pandas Styler below reproduces
+        # the same category-tint + z-score heat coloring the old Table had,
+        # just as CSS background-color instead of baked-in pixel fill.
+        def zscore_style(z):
+            if pd.isna(z):
+                return ""
+            t = max(-1.0, min(1.0, z / 3.0))
+            if t >= 0:
+                r, g, b = 255, int(255 - t * 155), int(255 - t * 155)
+            else:
+                t = -t
+                r, g, b = int(255 - t * 155), int(255 - t * 155), 255
+            return f"background-color: rgb({r},{g},{b})"
+
+        CATEGORY_BG = {"Growth": "#eef4fb", "Labor": "#eefaf0", "Inflation": "#fdf3ec", "Rates": "#f5f0fb"}
+
+        display_df = grid_df.drop(columns=["SeriesID"]).copy()
+        display_df["Flag"] = display_df["Zscore"].apply(
+            lambda z: "outsized" if pd.notna(z) and abs(z) >= 2 else ("elevated" if pd.notna(z) and abs(z) >= 1.5 else "")
+        )
+        display_df = display_df.rename(columns={
+            "LatestRelease": "Latest Release", "PriorValue": "Prior", "LatestValue": "Latest", "Zscore": "Z-score (10y)",
+        })
+
+        def row_style(row):
+            base = f"background-color: {CATEGORY_BG.get(row['Category'], 'white')}"
+            styles = [base] * len(row)
+            styles[row.index.get_loc("Z-score (10y)")] = zscore_style(row["Z-score (10y)"]) or base
+            return styles
+
+        styled = display_df.style.apply(row_style, axis=1).format(
+            {"Prior": "{:.2f}", "Latest": "{:.2f}", "Change": "{:+.2f}", "Z-score (10y)": "{:+.2f}"}, na_rep="n/a"
+        )
+        st.dataframe(styled, use_container_width=True, hide_index=True)
 
 with tab_credit:
     st.subheader("Household credit")

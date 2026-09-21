@@ -131,3 +131,25 @@ so it prompts for the `repo` scope this time.
   so the two don't drift apart -- change both together if you touch either.
   Page/nav icons are Material Symbols (`:material/name:` in `streamlit_app.py`),
   not emoji, on purpose.
+
+## Mobile
+
+Designed to work on a phone, not just desktop -- this took a real rewrite
+(2026-09-21), not just responsive CSS, because two things don't reflow on
+their own:
+
+- **One Plotly figure can't reflow.** `rates_macro.py`'s old 2x2
+  `make_subplots` dashboard and its FOMC grid `go.Table` both baked several
+  panels/columns into a single fixed-layout image -- fine at desktop width,
+  illegible once squeezed to ~360-390px. Split into independent charts
+  (`chart()` calls Streamlit stacks naturally, same as every `st.columns(2)`
+  pair already used elsewhere) and, for the grid, a native `st.dataframe`
+  (real horizontal touch-scroll, not a shrinking raster).
+- **Plotly chart titles don't wrap.** A title long enough to read as a full
+  sentence at desktop width just clips at the edges on a phone. Titles were
+  shortened everywhere (full context still lives in each page's
+  `st.caption()`, which *does* wrap).
+- Legend/title collision (a wrapped horizontal legend growing into the
+  title) is now `style_fig()`'s *default* behavior whenever `legend=True`
+  in all three pipelines, not a per-chart patch -- see the "MOBILE
+  REWRITE" comment in each `style_fig()`.

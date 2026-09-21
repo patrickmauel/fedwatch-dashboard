@@ -33,6 +33,14 @@ would need each country's real-time GDP/inflation/policy-rate data sourced
 under HLW's own precise definitions (which differ by country and aren't
 safely inferable from generic FRED series) -- flagged rather than
 silently worked around.
+
+Section 6 (trade balance) is wrapped in try/except -- Eurostat's API
+returned a raw HTML maintenance page instead of data during actual testing
+on 2026-09-21. Without the wrap, that outage would throw before this
+pipeline's save step and lose every OTHER chart for the day too, not just
+this one. See the comment at that section for why it's the only one
+wrapped (every other external call here has an actual uptime track record;
+this doesn't).
 """
 import datetime as dt
 import json
@@ -64,6 +72,15 @@ COUNTRY_COLOR = {"US": CAT[0], "Euro Area": CAT[1], "Canada": CAT[2]}
 
 
 def style_fig(fig, title, yaxis_title=None, height=380, legend=True):
+    # MOBILE REWRITE (2026-09-21): a horizontal legend that wraps to 2+
+    # lines has nowhere to go but on top of the title under a fixed
+    # t=60/yanchor="bottom" -- and on an actual phone width (~360-390px)
+    # almost any 3+-entry legend wraps (see pipelines/equities.py's
+    # style_fig for the fuller version of this comment). Default whenever
+    # legend=True; charts with legend=False keep the tighter original
+    # margin since there's no legend to collide with.
+    margin_t = 110 if legend else 60
+    legend_yanchor = "top" if legend else "bottom"
     fig.update_layout(
         # BUG FIX (site-wide outage, see pipelines/equities.py's style_fig for
         # the full story): template=None stops pio.write_json from baking
@@ -78,9 +95,9 @@ def style_fig(fig, title, yaxis_title=None, height=380, legend=True):
         font=dict(color=INK_SECONDARY, size=12),
         hovermode="x unified",
         height=height,
-        margin=dict(l=60, r=30, t=60, b=40),
+        margin=dict(l=60, r=30, t=margin_t, b=40),
         showlegend=legend,
-        legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="left", x=0, font=dict(size=11)),
+        legend=dict(orientation="h", yanchor=legend_yanchor, y=1.0, xanchor="left", x=0, font=dict(size=11)),
     )
     fig.update_xaxes(showgrid=False, showline=True, linecolor=BASELINE, ticks="outside", tickcolor=BASELINE, tickfont=dict(color=INK_MUTED))
     fig.update_yaxes(showgrid=True, gridcolor=GRIDLINE, gridwidth=1, zeroline=False, showline=False, tickfont=dict(color=INK_MUTED), title=dict(text=yaxis_title, font=dict(size=11, color=INK_MUTED)))
@@ -345,7 +362,7 @@ def main():
         fig.add_trace(go.Scatter(x=actual_growth_hist.index, y=actual_growth_hist.values, name="Actual GDP growth", line=dict(color=CAT[2], width=2)))
         add_fan(fig, actual_growth_fcst, CAT[2], "Actual")  # CAT[2] == rgb(27,175,122), was a hand-typed literal
         add_recession_bands(fig, recession_bands, xmin=view_ystart)
-        FIGURES[f"{key_prefix}_gdp"] = style_fig(fig, f"{country}: GDP Growth, Actual vs. Potential", yaxis_title="YoY %")
+        FIGURES[f"{key_prefix}_gdp"] = style_fig(fig, f"{country} GDP: Actual vs. Potential", yaxis_title="YoY %")
 
         infl_hist = df_combined.loc[view_ystart:, (country, "inflation")]
         infl_fcst = df_countries.loc[:, (country, "inflation")]
@@ -357,11 +374,28 @@ def main():
 
         rate_hist = df_combined.loc[view_ystart:, (country, "interest")]
         rate_fcst = df_countries.loc[:, (country, "interest")]
+        # r*: trailing = HLW's own published estimate for this country
+        # (df_combined's "rstar" column, loaded in section 1 above from the
+        # same workbook as everything else); forward = the SAME per-path
+        # Monte Carlo simulation that produces rate_fcst -- rstar is
+        # simulated every quarter of every path in run_hlw() above
+        # (rstar = c*g + z, both random-walked), not held flat, so it gets
+        # a real mean + 16th/84th-percentile band via add_fan() just like
+        # the policy rate itself. CAT[6] (violet) for r* in every country's
+        # chart -- distinct from all three COUNTRY_COLOR assignments, so it
+        # never collides with whichever single country a given chart shows.
+        rstar_hist = df_combined.loc[view_ystart:, (country, "rstar")]
+        rstar_fcst = df_countries.loc[:, (country, "rstar")]
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=rate_hist.index, y=rate_hist.values, line=dict(color=color, width=2)))
+        fig.add_trace(go.Scatter(x=rate_hist.index, y=rate_hist.values, name="Policy rate", line=dict(color=color, width=2)))
         add_fan(fig, rate_fcst, color, "Policy rate", y_start=view_ystart)
+        fig.add_trace(go.Scatter(x=rstar_hist.index, y=rstar_hist.values, name="r*", line=dict(color=CAT[6], width=2)))
+        add_fan(fig, rstar_fcst, CAT[6], "r*", y_start=view_ystart)
         add_recession_bands(fig, recession_bands, xmin=view_ystart)
-        FIGURES[f"{key_prefix}_rate"] = style_fig(fig, f"{country}: Policy Rate", yaxis_title="%", legend=False)
+        # 4 legend entries now (was legend=False entirely before r* was
+        # added) -- style_fig()'s default margin/legend positioning handles
+        # the resulting wrap at any width.
+        FIGURES[f"{key_prefix}_rate"] = style_fig(fig, f"{country}: Policy Rate & r*", yaxis_title="%", height=440)
 
     # =========================================================================
     # 4. Cross-country policy rate comparison
@@ -374,7 +408,7 @@ def main():
         fig.add_trace(go.Scatter(x=hist.index, y=hist.values, name=f"{country} (actual)", line=dict(color=color, width=2)))
         fig.add_trace(go.Scatter(x=fcst_mean.index, y=fcst_mean.values, name=f"{country} (model mean)", line=dict(color=color, width=2, dash="dash")))
     add_recession_bands(fig, recession_bands, xmin=view_ystart)
-    FIGURES["rates_comparison"] = style_fig(fig, "Policy Rates: US vs. Euro Area vs. Canada", yaxis_title="%", height=440)
+    FIGURES["rates_comparison"] = style_fig(fig, "Policy Rates: US, Euro Area, Canada", yaxis_title="%", height=440)
 
     # =========================================================================
     # 5. FX forecasts
@@ -392,50 +426,72 @@ def main():
         fig.add_trace(go.Scatter(x=d.index, y=d.values, line=dict(color=CAT[0], width=2)))
         add_fan(fig, modeled, CAT[0], title, y_start=view_ystart)
         add_recession_bands(fig, recession_bands, xmin=view_ystart)
-        FIGURES[f"fx_{name}"] = style_fig(fig, f"{title} Forecast (from rate differential)", yaxis_title=title, legend=False)
+        # Chart title is deliberately shorter than `title` (used as the
+        # y-axis label and add_fan()'s series name below) -- "CAD/USD (USD
+        # per CAD) Forecast (from rate differential)" clips on a phone
+        # width; Plotly titles don't wrap. Full unit detail stays on the
+        # y-axis where there's no such constraint.
+        FIGURES[f"fx_{name}"] = style_fig(fig, f"{title.split(' (')[0]} Forecast", yaxis_title=title, legend=False)
 
     # =========================================================================
     # 6. Trade balance (% of GDP, comparable scale so combinable on one chart)
     # =========================================================================
-    print("Pulling trade balance data...")
-    us_exports = web.DataReader("BOPTEXP", "fred", start_date, end_date).squeeze()
-    us_imports = web.DataReader("BOPTIMP", "fred", start_date, end_date).squeeze()
-    us_nex = us_exports - us_imports  # millions of USD, monthly
+    # Wrapped in try/except (the only section here that is): this is the one
+    # external dependency in this pipeline with no track record of uptime --
+    # Eurostat's API returned a raw "sorry.ec.europa.eu" maintenance page
+    # (HTML, not TSV) during actual testing on 2026-09-21, not a hypothetical.
+    # Every other section above (HLW estimates, FRED data, FX) has been
+    # reliable in practice; if that changes, wrap those too rather than
+    # broadening this except. Without the wrap, one Eurostat outage would
+    # throw before the save step below and lose ALL of this pipeline's
+    # figures for the day -- not just this one chart -- same failure shape
+    # as the missing-xlrd incident, just within one file instead of across
+    # pipelines. pages/currencies.py's chart() helper already renders a
+    # plain "missing chart" warning for an absent FIGURES key, so skipping
+    # this one on failure degrades gracefully instead of taking down the
+    # whole page.
+    try:
+        print("Pulling trade balance data...")
+        us_exports = web.DataReader("BOPTEXP", "fred", start_date, end_date).squeeze()
+        us_imports = web.DataReader("BOPTIMP", "fred", start_date, end_date).squeeze()
+        us_nex = us_exports - us_imports  # millions of USD, monthly
 
-    # BUG FIX: the Eurostat aggregate code changed from EA20 to EA21 (the
-    # Eurozone gained a member) -- the notebook's hardcoded 'EXT_EA20' row
-    # keys no longer exist in the dataset; using the current 'EXT_EA21' keys.
-    eurostat_url = "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/ext_st_eabec?format=TSV"
-    df_raw = pd.read_csv(eurostat_url, sep="\t", index_col=[0])
-    df_raw = df_raw.loc[
-        ["M,EXP,TRD_VAL,EXT_EA21,TOTAL,EA21", "M,IMP,TRD_VAL,EXT_EA21,TOTAL,EA21"], :
-    ].T.rename(columns={"M,EXP,TRD_VAL,EXT_EA21,TOTAL,EA21": "Exports", "M,IMP,TRD_VAL,EXT_EA21,TOTAL,EA21": "Imports"})
-    df_raw.index = pd.to_datetime(df_raw.index.str.strip(), format="%Y-%m")
-    df_raw.index.names = ["date"]
-    df_raw = df_raw.astype(float)
-    eu_nex = df_raw.loc[:, "Exports"] - df_raw.loc[:, "Imports"]  # millions of EUR, monthly
+        # BUG FIX: the Eurostat aggregate code changed from EA20 to EA21 (the
+        # Eurozone gained a member) -- the notebook's hardcoded 'EXT_EA20' row
+        # keys no longer exist in the dataset; using the current 'EXT_EA21' keys.
+        eurostat_url = "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/ext_st_eabec?format=TSV"
+        df_raw = pd.read_csv(eurostat_url, sep="\t", index_col=[0])
+        df_raw = df_raw.loc[
+            ["M,EXP,TRD_VAL,EXT_EA21,TOTAL,EA21", "M,IMP,TRD_VAL,EXT_EA21,TOTAL,EA21"], :
+        ].T.rename(columns={"M,EXP,TRD_VAL,EXT_EA21,TOTAL,EA21": "Exports", "M,IMP,TRD_VAL,EXT_EA21,TOTAL,EA21": "Imports"})
+        df_raw.index = pd.to_datetime(df_raw.index.str.strip(), format="%Y-%m")
+        df_raw.index.names = ["date"]
+        df_raw = df_raw.astype(float)
+        eu_nex = df_raw.loc[:, "Exports"] - df_raw.loc[:, "Imports"]  # millions of EUR, monthly
 
-    us_gdp = web.DataReader("GDP", "fred", start_date, end_date).squeeze()
-    us_gdp_m = us_gdp.resample("QE").mean().resample("ME").interpolate().resample("MS").mean() / 4 / 3  # quarterly $bn -> monthly $bn
+        us_gdp = web.DataReader("GDP", "fred", start_date, end_date).squeeze()
+        us_gdp_m = us_gdp.resample("QE").mean().resample("ME").interpolate().resample("MS").mean() / 4 / 3  # quarterly $bn -> monthly $bn
 
-    eu_gdp = web.DataReader("EUNNGDP", "fred", start_date, end_date).squeeze()
-    eu_gdp_m = eu_gdp.resample("QE").mean().resample("ME").interpolate().resample("MS").mean() / 3  # quarterly EUR bn -> monthly EUR bn
+        eu_gdp = web.DataReader("EUNNGDP", "fred", start_date, end_date).squeeze()
+        eu_gdp_m = eu_gdp.resample("QE").mean().resample("ME").interpolate().resample("MS").mean() / 3  # quarterly EUR bn -> monthly EUR bn
 
-    # NB: BOPTEXP/BOPTIMP (US trade) are in millions of USD but FRED's GDP
-    # series is in billions, hence /1000 below -- but EUNNGDP (Euro Area GDP)
-    # and Eurostat's TRD_VAL (EU trade) are BOTH already in millions of EUR,
-    # so no conversion is needed on that side (dividing eu_nex by 1000 too
-    # would silently make the ratio ~1000x too small, i.e. an invisible flat
-    # line at ~0 instead of the real ~2-4% surplus).
-    us_nex_gdp = (us_nex / 1000.0) / us_gdp_m.reindex(pd.date_range(us_gdp_m.index.min(), us_nex.index.max(), freq="MS")).ffill() * 100.0
-    eu_nex_gdp = eu_nex / eu_gdp_m.reindex(pd.date_range(eu_gdp_m.index.min(), eu_nex.index.max(), freq="MS")).ffill() * 100.0
+        # NB: BOPTEXP/BOPTIMP (US trade) are in millions of USD but FRED's GDP
+        # series is in billions, hence /1000 below -- but EUNNGDP (Euro Area GDP)
+        # and Eurostat's TRD_VAL (EU trade) are BOTH already in millions of EUR,
+        # so no conversion is needed on that side (dividing eu_nex by 1000 too
+        # would silently make the ratio ~1000x too small, i.e. an invisible flat
+        # line at ~0 instead of the real ~2-4% surplus).
+        us_nex_gdp = (us_nex / 1000.0) / us_gdp_m.reindex(pd.date_range(us_gdp_m.index.min(), us_nex.index.max(), freq="MS")).ffill() * 100.0
+        eu_nex_gdp = eu_nex / eu_gdp_m.reindex(pd.date_range(eu_gdp_m.index.min(), eu_nex.index.max(), freq="MS")).ffill() * 100.0
 
-    fig = go.Figure()
-    for name, s, color in [("US", us_nex_gdp, CAT[0]), ("Euro Area", eu_nex_gdp, CAT[1])]:
-        d = s.loc[view_ystart:]
-        fig.add_trace(go.Scatter(x=d.index, y=d.values, name=name, line=dict(color=color, width=2)))
-    add_recession_bands(fig, recession_bands, xmin=view_ystart)
-    FIGURES["trade_balance"] = style_fig(fig, "Net Exports (% of GDP): US vs. Euro Area", yaxis_title="% of GDP")
+        fig = go.Figure()
+        for name, s, color in [("US", us_nex_gdp, CAT[0]), ("Euro Area", eu_nex_gdp, CAT[1])]:
+            d = s.loc[view_ystart:]
+            fig.add_trace(go.Scatter(x=d.index, y=d.values, name=name, line=dict(color=color, width=2)))
+        add_recession_bands(fig, recession_bands, xmin=view_ystart)
+        FIGURES["trade_balance"] = style_fig(fig, "Net Exports: US vs. Euro Area", yaxis_title="% of GDP")
+    except Exception as e:
+        print(f"WARNING: trade balance section failed ({e!r}) -- skipping this chart, saving everything else.")
 
     # =========================================================================
     # 7. Save everything

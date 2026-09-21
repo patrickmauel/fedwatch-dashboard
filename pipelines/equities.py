@@ -149,6 +149,19 @@ SERIES_COLOR = {
 
 
 def style_fig(fig, title, yaxis_title=None, height=440, legend=True, hovermode="x unified"):
+    # MOBILE REWRITE (2026-09-21): a horizontal legend that wraps to 2+
+    # lines has nowhere to go but on top of the title under the old fixed
+    # t=70/yanchor="bottom" combo -- previously patched per-chart (see the
+    # yield_comparison-specific comment this replaces) whenever a chart
+    # happened to have enough entries to wrap at the widths tested. On an
+    # actual phone width (~360-390px) almost any 3+-entry legend wraps, so
+    # this is now the default whenever legend=True rather than a per-chart
+    # exception -- t=110 reserves room for a wrapped legend and
+    # yanchor="top" hangs it down from y=1.0 instead of growing upward into
+    # the title. Charts with legend=False keep the tighter original margin
+    # -- there's no legend to collide with, so no need to reserve for one.
+    margin_t = 110 if legend else 70
+    legend_yanchor = "top" if legend else "bottom"
     fig.update_layout(
         # BUG FIX: caused a site-wide outage the day this section shipped.
         # go.Figure() defaults layout.template to plotly's full built-in
@@ -169,15 +182,9 @@ def style_fig(fig, title, yaxis_title=None, height=440, legend=True, hovermode="
         font=dict(color=INK_SECONDARY, size=12),
         hovermode=hovermode,
         height=height,
-        margin=dict(l=60, r=30, t=70, b=40),
+        margin=dict(l=60, r=30, t=margin_t, b=40),
         showlegend=legend,
-        # Short labels (below) keep these 5 entries on one row at normal
-        # container widths -- a 6-entry version with longer names (see the
-        # HY-series removal note in the module docstring) used to wrap to 2
-        # lines and collide with the title above; dropping HY and shortening
-        # labels fixed that at the source instead of just carving out more
-        # margin for a 2-line legend.
-        legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="left", x=0, font=dict(size=11)),
+        legend=dict(orientation="h", yanchor=legend_yanchor, y=1.0, xanchor="left", x=0, font=dict(size=11)),
     )
     fig.update_xaxes(showgrid=False, showline=True, linecolor=BASELINE, ticks="outside", tickcolor=BASELINE, tickfont=dict(color=INK_MUTED))
     fig.update_yaxes(showgrid=True, gridcolor=GRIDLINE, gridwidth=1, zeroline=False, showline=False, tickfont=dict(color=INK_MUTED), title=dict(text=yaxis_title, font=dict(size=11, color=INK_MUTED)))
@@ -526,22 +533,13 @@ def main():
         visible="legendonly",
     ))
     add_recession_bands(fig, recession_bands)
+    # 7 legend entries (6 visible + Implied Earnings Growth
+    # hidden-but-still-occupying-a-legend-slot) -- style_fig()'s default
+    # margin/legend positioning now handles the wrap this causes at any
+    # width, including mobile (see the MOBILE REWRITE comment in
+    # style_fig() itself).
     FIGURES["yield_comparison"] = style_fig(
-        fig, "S&P 500 Fundamental Yields vs. the Rest of the Capital Structure", yaxis_title="%", height=520
-    )
-    # BUG FIX (same shape as the legend/title collision this chart hit
-    # before dropping the HY line -- see that commit): back up to 7 legend
-    # entries now (6 visible + Implied Earnings Growth hidden-but-still-
-    # occupying-a-legend-slot). Even with short labels this wraps to 2
-    # lines below ~1000px container width and the default t=70/
-    # yanchor="bottom" gives a wrapped legend nowhere to go but on top of
-    # the title. t=110 (matches height=520 above) plus yanchor="top"
-    # (anchors the legend's TOP at y=1.0, hanging downward) fixes it the
-    # same way as before. Verified by rendering at 800px/1200px with
-    # kaleido: no collision at either width now.
-    FIGURES["yield_comparison"].update_layout(
-        margin=dict(l=60, r=30, t=110, b=40),
-        legend=dict(orientation="h", yanchor="top", y=1.0, xanchor="left", x=0, font=dict(size=11)),
+        fig, "S&P 500 Yields vs. Capital Structure", yaxis_title="%", height=520
     )
 
     # =========================================================================
@@ -619,7 +617,7 @@ def main():
     fig.add_hline(y=0, line=dict(color=BASELINE, width=1, dash="dot"))
     fig.add_vline(x=0, line=dict(color=BASELINE, width=1, dash="dot"))
     FIGURES["curve_bias"] = style_fig(
-        fig, "Curve Bias: Short-Term Extension vs. Medium-Term Trend",
+        fig, "Curve Bias: Extension vs. Trend",
         yaxis_title="Extension vs. 21d avg (σ of daily moves)", height=520, hovermode="closest",
     )
     FIGURES["curve_bias"].update_xaxes(title=dict(text="21d trend (σ of daily moves, √21-scaled)", font=dict(size=11, color=INK_MUTED)))

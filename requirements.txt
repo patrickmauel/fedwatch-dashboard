@@ -3,6 +3,16 @@ numpy
 scipy
 statsmodels
 openpyxl
+xlrd  # pipelines/equities.py reads Shiller's ie_data.xls (legacy binary .xls,
+      # not .xlsx) -- openpyxl above only covers .xlsx; pandas silently needs
+      # this separate engine for .xls and raises ImportError without it. This
+      # was missing from launch (2026-09-12) until 2026-09-21: worked in every
+      # local test because the fedwatch conda env happened to already have it
+      # from unrelated earlier work, so it only ever failed in GitHub Actions'
+      # clean environment -- silently, since the workflow continues past one
+      # pipeline's failure (see daily_refresh.yml) and currencies/rates_macro
+      # kept succeeding and committing daily, masking it. Confirmed via `gh
+      # run view --log` on the actual failing runs, not guessed.
 pandas_datareader
 # <8: plotly 7.0 broke reading JSON charts written under 6.x (see the
 # template=None bug-fix comments in pipelines/*.py's style_fig()). Charts are

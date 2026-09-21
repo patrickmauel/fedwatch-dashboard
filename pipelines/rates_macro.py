@@ -588,7 +588,7 @@ def main():
     y_start = "2023"
     fig = make_subplots(
         rows=2, cols=2,
-        subplot_titles=("rGDP Realizations and Projections", "PCE Realizations and Projections", "GDP Modeled", "Fed Funds: Model Projection vs. Treasury-Implied Forward Path"),
+        subplot_titles=("rGDP Realizations and Projections", "PCE Realizations and Projections", "GDP Modeled", "Fed Funds & r*: Model Projection vs. Treasury-Implied Forward Path"),
         vertical_spacing=0.12, horizontal_spacing=0.08,
     )
     L1, L2, L3, L4 = "legend", "legend2", "legend3", "legend4"
@@ -621,6 +621,17 @@ def main():
     d = ff.loc[y_start:]
     fig.add_trace(go.Scatter(x=d.index, y=d.values, name="Fed Funds (effective)", line=dict(color="blue"), legend=L4), row=2, col=2)
     add_fan(fig, 2, 2, L4, ff_fcst, "rgb(44,160,44)", "FF", y_start)
+    # r* (Laubach-Williams natural rate): trailing = LW's own one-sided
+    # estimates (df_lwrstar, already pulled in section 4 above); forward =
+    # rstar_0 from the SAME Monte Carlo paths that produce ff_fcst above --
+    # it's simulated stochastically per path (rstar_0 = c*g + z, both
+    # themselves random-walked -- see the simulation loop in section 7), so
+    # it gets a genuine 1000-path distribution, not a single deterministic
+    # line held flat. Reuses add_fan() unchanged, same as every other panel.
+    d = df_lwrstar["rstar"].loc[y_start:]
+    fig.add_trace(go.Scatter(x=d.index, y=d.values, name="r* (Laubach-Williams)", line=dict(color="rgb(148,103,189)"), legend=L4), row=2, col=2)
+    rstar_fcst = df_sims["rstar_0"]
+    add_fan(fig, 2, 2, L4, rstar_fcst, "rgb(148,103,189)", "r*", y_start)
     d = fwd_daily.loc[y_start:pi_fcst.index.max()]
     fig.add_trace(go.Scatter(x=d.index, y=d.values, name="Treasury-implied forward", line=dict(color="black", dash="dash"), legend=L4), row=2, col=2)
 

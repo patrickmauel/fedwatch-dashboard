@@ -1,11 +1,11 @@
 {
-  "last_updated": "2026-10-30T16:53:26.077890+00:00",
+  "last_updated": "2026-10-31T15:55:52.230121+00:00",
   "data_asof": "2026-10-29",
   "shiller_asof": "2026-06-01",
   "earnings_yield": 3.83,
   "cape_yield": 2.4,
   "dividend_yield": 1.06,
-  "treasury_10y": 5.05,
+  "treasury_10y": 4.98,
   "baa_yield": 6.47,
   "earnings_yield_vs_baa": -2.64,
   "implied_earnings_growth": 5.21,

@@ -1,9 +1,9 @@
 {
-  "last_updated": "2026-10-30T16:54:45.548261+00:00",
+  "last_updated": "2026-10-31T15:56:49.596806+00:00",
   "fcst_start_lw": "2026-06-30",
   "last_actual_quarter": "2026-09-30",
   "fcst_end": "2029-09-30",
-  "treasury_asof_date": "2026-10-29",
+  "treasury_asof_date": "2026-10-30",
   "fed_funds_effective": 3.88,
   "unemployment_rate": 4.2,
   "core_pce_yoy": 3.12,

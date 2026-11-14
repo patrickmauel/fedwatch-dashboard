@@ -1,16 +1,16 @@
 {
-  "last_updated": "2026-11-13T18:15:04.409211+00:00",
-  "data_asof": "2026-11-12",
+  "last_updated": "2026-11-14T16:48:31.790938+00:00",
+  "data_asof": "2026-11-13",
   "shiller_asof": "2026-06-01",
-  "earnings_yield": 3.89,
-  "cape_yield": 2.44,
+  "earnings_yield": 3.91,
+  "cape_yield": 2.45,
   "dividend_yield": 1.08,
-  "treasury_10y": 4.98,
+  "treasury_10y": 5.1,
   "baa_yield": 6.58,
-  "earnings_yield_vs_baa": -2.69,
-  "implied_earnings_growth": 5.21,
-  "implied_fwd_earnings_yield": 4.09,
-  "curve_bias_extension": -0.3,
-  "curve_bias_trend": -0.27,
-  "curve_bias_asof": "2026-11-12"
+  "earnings_yield_vs_baa": -2.67,
+  "implied_earnings_growth": 5.18,
+  "implied_fwd_earnings_yield": 4.11,
+  "curve_bias_extension": -0.52,
+  "curve_bias_trend": -0.38,
+  "curve_bias_asof": "2026-11-13"
 }

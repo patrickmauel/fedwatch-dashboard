@@ -1,7 +1,7 @@
 Category,Series,SeriesID,LatestRelease,LatestValue,PriorValue,Change,Zscore
 Growth,Real GDP (QoQ SAAR %),GDPC1,2026-07-01,3.33,2.20,1.13,0.09140129771160602
 Growth,Retail Sales (MoM %),RSAFS,2026-10-01,0.2,0.8,0.2,-0.08609686592591374
-Growth,Industrial Production (MoM %),INDPRO,2026-10-01,-0.4,0.7,-0.4,-0.3048075266765051
+Growth,Industrial Production (MoM %),INDPRO,2026-10-01,-0.4,0.6,-0.4,-0.29884607224561943
 Growth,Housing Starts (MoM %),HOUST,2026-10-01,9.9,-7.0,9.9,1.0573093094629828
 Labor,Nonfarm Payrolls (k),PAYEMS,2026-10-01,165,60,165,0.023708409355514198
 Labor,Unemployment Rate (%),UNRATE,2026-10-01,4.10,4.20,-0.10,-0.09076855200450233
